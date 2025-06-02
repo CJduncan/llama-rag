@@ -1,0 +1,7 @@
+flask>=2.3.0
+flask-cors>=4.0.0
+chromadb>=0.4.15
+ollama>=0.1.7
+PyPDF2>=3.0.1
+python-docx>=1.1.0
+werkzeug>=2.3.0

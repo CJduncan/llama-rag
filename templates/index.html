@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Document Intelligence - Transform Your Business</title>
+    <meta name="description" content="Experience the power of AI document intelligence. Ask questions about business documents and get instant, accurate answers.">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a0f1c;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            color: white;
+            overflow-x: hidden;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 40px 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 900px;
+            width: 100%;
+            text-align: center;
+        }
+
+        .header {
+            margin-bottom: 80px;
+            opacity: 0;
+            animation: fadeInUp 0.8s ease-out 0.2s forwards;
+        }
+
+        .main-title {
+            font-size: 3.5rem;
+            font-weight: 300;
+            margin-bottom: 30px;
+            color: #ffffff;
+            letter-spacing: -0.01em;
+            line-height: 1.2;
+        }
+
+        .highlight {
+            background: linear-gradient(135deg, #4f8ff0 0%, #7c3aed 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-weight: 400;
+        }
+
+        .response-area {
+            min-height: 200px;
+            max-height: 400px;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            margin-bottom: 60px;
+            padding: 40px 20px;
+            opacity: 0;
+            animation: fadeInUp 0.8s ease-out 0.4s forwards;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        .response-text {
+            font-size: 1.8rem;
+            line-height: 1.4;
+            font-weight: 300;
+            text-align: center;
+            color: #e2e8f0;
+            max-width: 700px;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            width: 100%;
+            max-height: 360px;
+            overflow-y: auto;
+            padding-right: 10px;
+        }
+
+        .response-text::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .response-text::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+
+        .response-text::-webkit-scrollbar-thumb {
+            background: rgba(79, 143, 240, 0.5);
+            border-radius: 3px;
+        }
+
+        .response-text::-webkit-scrollbar-thumb:hover {
+            background: rgba(79, 143, 240, 0.7);
+        }
+
+        .placeholder-text {
+            color: #94a3b8;
+            font-style: italic;
+            font-size: 1.6rem;
+        }
+
+        .typing-indicator {
+            display: none;
+            font-size: 1.8rem;
+            color: #64748b;
+        }
+
+        .dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #64748b;
+            margin: 0 3px;
+            animation: typing 1.4s infinite ease-in-out;
+        }
+
+        .dot:nth-child(1) { animation-delay: -0.32s; }
+        .dot:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes typing {
+            0%, 80%, 100% {
+                transform: scale(0.8);
+                opacity: 0.5;
+            }
+            40% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .input-section {
+            opacity: 0;
+            animation: fadeInUp 0.8s ease-out 0.6s forwards;
+        }
+
+        .input-container {
+            position: relative;
+            max-width: 600px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+        }
+
+        .chat-input {
+            width: 100%;
+            padding: 20px 60px 20px 25px;
+            font-size: 1.1rem;
+            border: none;
+            border-radius: 50px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            outline: none;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            font-weight: 300;
+        }
+
+        .chat-input:focus {
+            background: rgba(255, 255, 255, 0.15);
+            box-shadow: 0 0 0 2px rgba(79, 143, 240, 0.3);
+        }
+
+        .chat-input::placeholder {
+            color: #64748b;
+            font-weight: 300;
+        }
+
+        .send-button {
+            position: absolute;
+            right: 4px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: linear-gradient(135deg, #4f8ff0 0%, #7c3aed 100%);
+            border: none;
+            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.2rem;
+            font-weight: 300;
+            flex-shrink: 0;
+        }
+
+        .send-button:hover:not(:disabled) {
+            transform: translateY(-50%) scale(1.05);
+            box-shadow: 0 5px 20px rgba(79, 143, 240, 0.4);
+        }
+
+        .send-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: translateY(-50%);
+        }
+
+        .features {
+            margin-top: 60px;
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            flex-wrap: wrap;
+            opacity: 0;
+            animation: fadeInUp 0.8s ease-out 0.8s forwards;
+        }
+
+        .feature {
+            font-size: 0.95rem;
+            color: #64748b;
+            font-weight: 300;
+            letter-spacing: 0.3px;
+            transition: color 0.3s ease;
+        }
+
+        .feature:hover {
+            color: #94a3b8;
+        }
+
+        .footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 20px;
+            text-align: center;
+            background: rgba(10, 15, 28, 0.95);
+            backdrop-filter: blur(20px);
+            z-index: 100;
+        }
+
+        .footer-link {
+            color: #64748b;
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 300;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            transition: color 0.3s ease;
+            cursor: pointer;
+        }
+
+        .footer-link:hover {
+            color: #4f8ff0;
+        }
+
+        .error-message {
+            color: #f87171;
+            font-size: 0.9rem;
+            margin-top: 10px;
+            text-align: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .error-message.show {
+            opacity: 1;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            .main-content {
+                padding: 30px 15px;
+            }
+
+            .main-title {
+                font-size: 2.5rem;
+                margin-bottom: 20px;
+            }
+            
+            .response-text {
+                font-size: 1.4rem;
+            }
+
+            .placeholder-text {
+                font-size: 1.3rem;
+            }
+            
+            .response-area {
+                padding: 30px 15px;
+                margin-bottom: 40px;
+                min-height: 160px;
+            }
+            
+            .features {
+                gap: 25px;
+                margin-top: 40px;
+            }
+            
+            .feature {
+                font-size: 0.85rem;
+            }
+
+            .chat-input {
+                font-size: 1rem;
+                padding: 18px 55px 18px 20px;
+            }
+
+            .send-button {
+                width: 40px;
+                height: 40px;
+                font-size: 1.1rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .main-title {
+                font-size: 2rem;
+            }
+            
+            .response-text {
+                font-size: 1.2rem;
+            }
+
+            .placeholder-text {
+                font-size: 1.1rem;
+            }
+
+            .input-container {
+                max-width: 95%;
+            }
+
+            .features {
+                gap: 20px;
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+
+        /* Loading state */
+        .loading .send-button {
+            background: #64748b;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+    </style>
+</head>
+<body>
+    <div class="main-content">
+        <div class="container">
+            <div class="header">
+                <h1 class="main-title">
+                    Learn what <span class="highlight">AI</span><br>
+                    can do for your business
+                </h1>
+            </div>
+
+            <div class="response-area">
+                <div class="response-text placeholder-text" id="responseText">
+                    Ask me about business processes, technology, or how AI can transform your operations.
+                </div>
+                <div class="typing-indicator" id="typingIndicator">
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                </div>
+            </div>
+
+            <div class="input-section">
+                <div class="input-container">
+                    <input 
+                        type="text" 
+                        class="chat-input" 
+                        id="chatInput" 
+                        placeholder="Type your question here..."
+                        maxlength="300"
+                        autocomplete="off"
+                    >
+                    <button class="send-button" id="sendButton" type="button">→</button>
+                </div>
+                <div class="error-message" id="errorMessage"></div>
+            </div>
+
+            <div class="features">
+                <div class="feature">Secure & Private</div>
+                <div class="feature">Instant Intelligence</div>
+                <div class="feature">Enterprise Ready</div>
+                <div class="feature">Multi-Format</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <span class="footer-link" id="moreLink">More</span>
+    </div>
+
+    <script>
+        const chatInput = document.getElementById('chatInput');
+        const sendButton = document.getElementById('sendButton');
+        const responseText = document.getElementById('responseText');
+        const typingIndicator = document.getElementById('typingIndicator');
+        const errorMessage = document.getElementById('errorMessage');
+        const moreLink = document.getElementById('moreLink');
+
+        let isLoading = false;
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.classList.add('show');
+            setTimeout(() => {
+                errorMessage.classList.remove('show');
+            }, 5000);
+        }
+
+        function hideError() {
+            errorMessage.classList.remove('show');
+        }
+
+        function showTypingIndicator() {
+            responseText.style.display = 'none';
+            typingIndicator.style.display = 'block';
+        }
+
+        function hideTypingIndicator() {
+            typingIndicator.style.display = 'none';
+            responseText.style.display = 'block';
+        }
+
+        function typeWriter(text, element) {
+            element.textContent = '';
+            element.classList.remove('placeholder-text');
+            let i = 0;
+            const speed = 20;
+            
+            function type() {
+                if (i < text.length) {
+                    element.textContent += text.charAt(i);
+                    i++;
+                    setTimeout(type, speed);
+                }
+            }
+            type();
+        }
+
+        function setLoadingState(loading) {
+            isLoading = loading;
+            sendButton.disabled = loading;
+            chatInput.disabled = loading;
+            
+            if (loading) {
+                document.body.classList.add('loading');
+            } else {
+                document.body.classList.remove('loading');
+            }
+        }
+
+        async function sendMessage() {
+            const message = chatInput.value.trim();
+            if (!message || isLoading) return;
+
+            hideError();
+            chatInput.value = '';
+            setLoadingState(true);
+            showTypingIndicator();
+            
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        model: 'llama3.2'
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Network error');
+                }
+
+                const data = await response.json();
+                
+                hideTypingIndicator();
+                setLoadingState(false);
+                
+                if (data.response) {
+                    typeWriter(data.response, responseText);
+                } else {
+                    responseText.textContent = 'Sorry, I couldn\'t process your request.';
+                    responseText.classList.remove('placeholder-text');
+                }
+                
+            } catch (error) {
+                hideTypingIndicator();
+                setLoadingState(false);
+                showError('Connection error. Please try again.');
+                responseText.textContent = 'Unable to connect. Please check your connection and try again.';
+                responseText.classList.remove('placeholder-text');
+            }
+        }
+
+        // Event listeners
+        sendButton.addEventListener('click', sendMessage);
+        
+        chatInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !isLoading) {
+                sendMessage();
+            }
+        });
+
+        // Focus input when page loads
+        window.addEventListener('load', function() {
+            setTimeout(() => {
+                chatInput.focus();
+            }, 100);
+        });
+
+        // More link
+        moreLink.addEventListener('click', function(e) {
+            e.preventDefault();
+            alert('Coming soon - Learn more about AI document intelligence solutions');
+        });
+    </script>
+</body>
+</html>
