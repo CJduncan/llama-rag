@@ -1,441 +1,263 @@
-from flask import Flask, render_template, request, jsonify
-from flask_cors import CORS
-import chromadb
-import ollama
-import os
-import hashlib
-from typing import List, Dict
-import PyPDF2
-import docx
-from pathlib import Path
-import time
-from werkzeug.utils import secure_filename
-import re
+from flask import Flask, request, jsonify, render_template
 import requests
+import re
 from datetime import datetime
-import secrets
-import logging
+import os
 
 app = Flask(__name__)
-# Configure app settings
-app.config.update(
-    SECRET_KEY=os.environ.get('SECRET_KEY', secrets.token_hex(32)),
-    MAX_CONTENT_LENGTH=16 * 1024 * 1024,  # 16MB max file size
-    UPLOAD_FOLDER='uploads',
-    SESSION_COOKIE_SECURE=os.environ.get('FLASK_ENV') == 'production',
-    SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE='Lax',
-    N8N_WEBHOOK_URL=os.environ.get('N8N_WEBHOOK_URL', 'https://cdmcatx69.app.n8n.cloud/webhook/3e2f713d-441c-462d-a206-5ced7dc503e4')
-)
 
-# Configure CORS for production
-CORS(app, origins=["http://localhost:8000", "https://yourdomain.com"])
-
-ALLOWED_EXTENSIONS = {'txt', 'pdf', 'docx'}
-
-# Create upload folder if it doesn't exist
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-
-class DocumentProcessor:
-    """Handles document processing and text extraction"""
-    
-    @staticmethod
-    def extract_text_from_pdf(file_path: str) -> str:
-        """Extract text from PDF files"""
-        text = ""
-        try:
-            with open(file_path, 'rb') as file:
-                pdf_reader = PyPDF2.PdfReader(file)
-                for page in pdf_reader.pages:
-                    text += page.extract_text() + "\n"
-        except Exception as e:
-            app.logger.error(f"Error reading PDF: {e}")
-        return text
-    
-    @staticmethod
-    def extract_text_from_docx(file_path: str) -> str:
-        """Extract text from DOCX files"""
-        text = ""
-        try:
-            doc = docx.Document(file_path)
-            for paragraph in doc.paragraphs:
-                text += paragraph.text + "\n"
-        except Exception as e:
-            app.logger.error(f"Error reading DOCX: {e}")
-        return text
-    
-    @staticmethod
-    def extract_text_from_txt(file_path: str) -> str:
-        """Extract text from TXT files"""
-        try:
-            with open(file_path, 'r', encoding='utf-8') as file:
-                return file.read()
-        except Exception as e:
-            app.logger.error(f"Error reading TXT: {e}")
-            return ""
-
-class RAGSystem:
-    """Main RAG system using Ollama and ChromaDB"""
-    
-    def __init__(self, collection_name: str = "documents"):
-        self.collection_name = collection_name
-        self.client = chromadb.PersistentClient(path="./chromadb")
-        self.collection = self.client.get_or_create_collection(name=collection_name)
-        self.doc_processor = DocumentProcessor()
-        
-    def chunk_text(self, text: str, chunk_size: int = 1000, overlap: int = 200) -> List[str]:
-        """Split text into overlapping chunks"""
-        chunks = []
-        start = 0
-        
-        while start < len(text):
-            end = start + chunk_size
-            chunk = text[start:end]
-            
-            # Try to break at sentence boundaries
-            if end < len(text):
-                last_period = chunk.rfind('.')
-                last_newline = chunk.rfind('\n')
-                break_point = max(last_period, last_newline)
-                
-                if break_point > start + chunk_size // 2:
-                    chunk = text[start:break_point + 1]
-                    end = break_point + 1
-            
-            chunks.append(chunk.strip())
-            start = end - overlap
-            
-        return [chunk for chunk in chunks if chunk]
-    
-    def add_document(self, file_path: str, file_name: str) -> bool:
-        """Add a document to the vector database"""
-        try:
-            # Extract text based on file type
-            file_extension = Path(file_path).suffix.lower()
-            
-            if file_extension == '.pdf':
-                text = self.doc_processor.extract_text_from_pdf(file_path)
-            elif file_extension == '.docx':
-                text = self.doc_processor.extract_text_from_docx(file_path)
-            elif file_extension == '.txt':
-                text = self.doc_processor.extract_text_from_txt(file_path)
-            else:
-                return False
-            
-            if not text.strip():
-                return False
-            
-            # Split into chunks
-            chunks = self.chunk_text(text)
-            
-            # Generate embeddings and store in ChromaDB
-            documents = []
-            metadatas = []
-            ids = []
-            
-            for i, chunk in enumerate(chunks):
-                doc_id = f"{file_name}_{i}_{hashlib.md5(chunk.encode()).hexdigest()[:8]}"
-                documents.append(chunk)
-                metadatas.append({
-                    "source": file_name,
-                    "chunk_id": i,
-                    "file_type": file_extension
-                })
-                ids.append(doc_id)
-            
-            # Add to ChromaDB
-            self.collection.add(
-                documents=documents,
-                metadatas=metadatas,
-                ids=ids
-            )
-            
-            app.logger.info(f"Successfully added document: {file_name}")
-            return True
-            
-        except Exception as e:
-            app.logger.error(f"Error adding document: {e}")
-            return False
-    
-    def search_documents(self, query: str, n_results: int = 5) -> List[Dict]:
-        """Search for relevant document chunks"""
-        try:
-            results = self.collection.query(
-                query_texts=[query],
-                n_results=n_results
-            )
-            
-            search_results = []
-            if results['documents'] and results['documents'][0]:
-                for i, doc in enumerate(results['documents'][0]):
-                    search_results.append({
-                        'content': doc,
-                        'metadata': results['metadatas'][0][i] if results['metadatas'] and results['metadatas'][0] else {},
-                        'distance': results['distances'][0][i] if results['distances'] and results['distances'][0] else 0
-                    })
-            
-            return search_results
-            
-        except Exception as e:
-            app.logger.error(f"Error searching documents: {e}")
-            return []
-    
-    def generate_response(self, query: str, context: str, model: str = "llama3.2") -> str:
-        """Generate response using Ollama with context"""
-        try:
-            prompt = f"""You are a helpful AI assistant for a document intelligence platform. Answer the user's question directly and concisely using the provided context. Keep responses under 3 sentences when possible. Do not mention "based on the document" or "according to the context" - just provide the information naturally.
-
-Context: {context}
-
-Question: {query}
-
-Provide a direct, conversational answer:"""
-            
-            response = ollama.chat(
-                model=model,
-                messages=[
-                    {
-                        'role': 'user',
-                        'content': prompt
-                    }
-                ]
-            )
-            
-            return response['message']['content']
-            
-        except Exception as e:
-            app.logger.error(f"Error generating response: {e}")
-            return f"I'm sorry, I'm having trouble processing your request right now. Please try again later."
-    
-    def get_document_count(self) -> int:
-        """Get number of documents in the collection"""
-        try:
-            return self.collection.count()
-        except:
-            return 0
-
-# Initialize RAG system
-rag_system = RAGSystem()
-
-def allowed_file(filename):
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-def is_valid_email(email):
-    """Validate email format"""
-    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    return re.match(pattern, email) is not None
-
-def extract_email_from_message(message):
-    """Extract email address from a message"""
-    # Pattern to find email addresses in text
-    email_pattern = r'\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b'
-    matches = re.findall(email_pattern, message)
-    
-    # Return the first valid email found
-    for match in matches:
-        if is_valid_email(match):
-            return match
-    return None
-
-def send_to_n8n(email, context=""):
-    """Send email to n8n webhook"""
-    try:
-        webhook_url = app.config.get('N8N_WEBHOOK_URL')
-        
-        # Debug logging
-        app.logger.info(f"Attempting to send email to n8n: {email}")
-        app.logger.info(f"Webhook URL: {webhook_url}")
-        
-        if not webhook_url:
-            app.logger.warning("N8N_WEBHOOK_URL not configured")
-            return False
-        
-        payload = {
-            'email': email,
-            'timestamp': datetime.now().isoformat(),
-            'source': 'ai-document-chat',
-            'context': context,
-            'ip': request.remote_addr,
-            'user_agent': request.headers.get('User-Agent', ''),
-            'message': 'New consultation request from AI chat'
-        }
-        
-        app.logger.info(f"Sending payload: {payload}")
-        
-        response = requests.post(
-            webhook_url,
-            json=payload,
-            headers={'Content-Type': 'application/json'},
-            timeout=15
-        )
-        
-        app.logger.info(f"N8N response status: {response.status_code}")
-        app.logger.info(f"N8N response text: {response.text}")
-        
-        return response.status_code in [200, 201, 202]
-        
-    except requests.exceptions.Timeout:
-        app.logger.error("N8N webhook timeout")
-        return False
-    except requests.exceptions.RequestException as e:
-        app.logger.error(f"N8N webhook request failed: {e}")
-        return False
-    except Exception as e:
-        app.logger.error(f"Unexpected error sending to n8n: {e}")
-        return False
+# Configuration - Update this with your actual n8n webhook URL
+N8N_WEBHOOK_URL = "https://cdmcatx69.app.n8n.cloud/webhook/3e2f713d-441c-462d-a206-5ced7dc503e4"
+OLLAMA_URL = "http://localhost:11434/api/generate"
 
 @app.route('/')
 def index():
-    """Serve the main page"""
     return render_template('index.html')
 
 @app.route('/more')
 def more():
-    """Serve the more information page"""
     return render_template('more.html')
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    """Handle chat requests"""
     try:
-        data = request.json
-        if not data:
-            return jsonify({'error': 'No data provided'}), 400
-            
-        query = data.get('message', '').strip()
-        model = data.get('model', 'llama3.2')
+        data = request.get_json()
+        message = data.get('message', '').strip()
+        message_lower = message.lower()
+        awaiting_scheduling_decision = data.get('awaiting_scheduling_decision', False)
+        awaiting_email_and_time = data.get('awaiting_email_and_time', False)
         
-        if not query:
-            return jsonify({'error': 'No message provided'}), 400
+        print(f"Received message: {message}")
+        print(f"Awaiting scheduling decision: {awaiting_scheduling_decision}")
+        print(f"Awaiting email and time: {awaiting_email_and_time}")
         
-        # Debug: Log all incoming messages
-        app.logger.info(f"Received message: '{query}'")
-        
-        # Check if the message contains an email
-        extracted_email = extract_email_from_message(query)
-        app.logger.info(f"Extracted email: {extracted_email}")
-        
-        if extracted_email:
-            # Send email to n8n
-            success = send_to_n8n(extracted_email, "Consultation request from AI chat")
-            
-            if success:
-                response_text = "Thank you! We've received your email and will be in touch within 24 hours to schedule your free consultation. We're excited to discuss how AI document intelligence can transform your business!"
+        # Step 1: Check if we're waiting for scheduling decision (yes/no)
+        if awaiting_scheduling_decision:
+            if any(word in message_lower for word in ['yes', 'sure', 'okay', 'ok', 'schedule', 'book', 'definitely', 'absolutely']):
+                return jsonify({
+                    'response': "Great! Please provide your email address and preferred time in one message. For example: 'john@email.com tomorrow at 2pm' or 'sarah@company.com next Tuesday morning'",
+                    'ask_for_email_and_time': True
+                })
             else:
-                response_text = "Thank you for your interest! There was a technical issue capturing your email, but you can reach us directly at contact@yourdomain.com for a consultation."
-            
-            return jsonify({
-                'response': response_text,
-                'sources': 0,
-                'email_captured': success
-            })
+                return jsonify({
+                    'response': "No problem! Feel free to ask me any other questions about how AI document intelligence can help your business.",
+                    'conversation_reset': True
+                })
         
-        # Search for relevant documents
-        search_results = rag_system.search_documents(query)
+        # Step 2: Check if we're waiting for email and time
+        elif awaiting_email_and_time:
+            email_and_time = parse_email_and_time(message)
+            
+            if email_and_time and email_and_time['email'] and email_and_time['time']:
+                print(f"Parsed email: {email_and_time['email']}, time: {email_and_time['time']}")
+                
+                # Send to n8n for appointment processing
+                appointment_result = send_to_n8n_appointment(
+                    email_and_time['email'], 
+                    email_and_time['time']
+                )
+                
+                print(f"n8n appointment result: {appointment_result}")
+                
+                if appointment_result.get('success'):
+                    return jsonify({
+                        'response': appointment_result.get('message', 'Perfect! I\'ve scheduled your consultation. You\'ll receive a confirmation email shortly with all the details.'),
+                        'appointment_confirmed': True
+                    })
+                elif appointment_result.get('busy'):
+                    return jsonify({
+                        'response': appointment_result.get('message', 'That time slot is already booked. Could you suggest another time?'),
+                        'appointment_busy': True
+                    })
+                else:
+                    return jsonify({
+                        'response': "I'm having trouble with scheduling right now. Could you try again in a moment, or I'll have someone reach out to you directly?",
+                        'appointment_busy': True
+                    })
+            else:
+                return jsonify({
+                    'response': "I couldn't find both an email and time in your message. Please try again with format like: 'john@email.com tomorrow at 2pm'",
+                    'ask_for_email_and_time': True
+                })
         
-        if search_results:
-            # Combine context from search results
-            context = "\n\n".join([result['content'] for result in search_results])
+        # Step 3: Check if this is just an email (for original email capture flow)
+        elif is_valid_email(message):
+            print(f"Valid email detected: {message}")
+            email_result = send_to_n8n_email(message)
             
-            # Generate response
-            response = rag_system.generate_response(query, context, model)
-            
-            # Add consultation offer to every response
-            response += "\n\nWould you like a free consultation? Just share your email and we'll reach out!"
-            
-            return jsonify({
-                'response': response,
-                'sources': len(search_results)
-            })
+            if email_result.get('success'):
+                return jsonify({
+                    'response': "Thank you! We've received your email and will be in touch within 24 hours to schedule your free consultation. We're excited to discuss how AI document intelligence can transform your business!",
+                    'email_captured': True
+                })
+            else:
+                return jsonify({
+                    'response': "Thank you for your email! There was a small issue saving it, but I've noted it down. We'll be in touch soon!",
+                    'email_captured': True
+                })
+        
+        # Step 4: Regular conversation - check if they want to schedule
         else:
-            return jsonify({
-                'response': "I don't have any relevant documents to answer your question at the moment. This AI system works best when it has access to your business documents for context.\n\nWould you like a free consultation? Just share your email and we'll reach out!",
-                'sources': 0
-            })
+            # Check if message indicates wanting to schedule
+            schedule_keywords = [
+                'schedule', 'appointment', 'meeting', 'consultation', 'book', 
+                'call', 'demo', 'talk', 'discuss', 'meet', 'setup', 'set up',
+                'calendar', 'available', 'time', 'when can'
+            ]
+            wants_to_schedule = any(keyword in message_lower for keyword in schedule_keywords)
+            
+            if wants_to_schedule:
+                return jsonify({
+                    'response': "I'd be happy to help you schedule a consultation! Our AI document intelligence platform can transform how your business processes documents, extracts insights, and automates workflows. Would you like to schedule a free 30-minute consultation to discuss your specific needs?",
+                    'ask_for_scheduling': True
+                })
+            else:
+                # Regular AI chat using Ollama
+                ai_response = get_ai_response(message)
+                return jsonify({'response': ai_response})
+    
+    except Exception as e:
+        print(f"Error in chat route: {str(e)}")
+        return jsonify({'error': 'Something went wrong. Please try again.'}), 500
+
+def is_valid_email(email):
+    """Check if string is a valid email format"""
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return re.match(pattern, email) is not None
+
+def parse_email_and_time(message):
+    """Extract email and time from user message"""
+    email_pattern = r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})'
+    email_match = re.search(email_pattern, message)
+    
+    if email_match:
+        email = email_match.group(1)
+        # Remove email from message to get time portion
+        time_text = re.sub(email_pattern, '', message).strip()
+        # Clean up the time text
+        time_text = re.sub(r'^[,\s]+|[,\s]+$', '', time_text)  # Remove leading/trailing commas and spaces
+        
+        return {
+            'email': email,
+            'time': time_text if time_text else None
+        }
+    return None
+
+def send_to_n8n_email(email):
+    """Send email to n8n workflow for processing"""
+    try:
+        payload = {
+            'type': 'email',
+            'email': email,
+            'timestamp': datetime.now().isoformat(),
+            'source': 'website_chat'
+        }
+        
+        print(f"Sending email to n8n: {payload}")
+        
+        response = requests.post(
+            N8N_WEBHOOK_URL,
+            json=payload,
+            timeout=10
+        )
+        
+        print(f"n8n email response status: {response.status_code}")
+        
+        if response.status_code == 200:
+            return {'success': True}
+        else:
+            print(f"n8n email error: {response.text}")
+            return {'success': False}
             
     except Exception as e:
-        app.logger.error(f"Error in chat endpoint: {e}")
-        return jsonify({'error': 'Sorry, there was an error processing your request.'}), 500
+        print(f"Error sending email to n8n: {str(e)}")
+        return {'success': False}
 
-@app.route('/test-email/<email>')
-def test_email_validation(email):
-    """Test email validation"""
-    is_valid = is_valid_email(email)
-    return jsonify({
-        'email': email,
-        'is_valid': is_valid,
-        'pattern_used': r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    })
-
-@app.route('/health')
-def health_check():
-    """Health check endpoint for monitoring"""
+def send_to_n8n_appointment(email, time_preference):
+    """Send appointment request to n8n workflow"""
     try:
-        doc_count = rag_system.get_document_count()
-        webhook_url = app.config.get('N8N_WEBHOOK_URL', 'Not configured')
+        payload = {
+            'type': 'appointment',
+            'email': email,
+            'time_preference': time_preference,
+            'timestamp': datetime.now().isoformat(),
+            'source': 'website_chat'
+        }
         
-        return jsonify({
-            'status': 'healthy',
-            'document_count': doc_count,
-            'webhook_configured': bool(webhook_url and webhook_url != 'Not configured'),
-            'webhook_url_set': bool(webhook_url and webhook_url != 'Not configured'),
-            'timestamp': int(time.time())
-        })
+        print(f"Sending appointment to n8n: {payload}")
+        
+        response = requests.post(
+            N8N_WEBHOOK_URL,
+            json=payload,
+            timeout=15
+        )
+        
+        print(f"n8n appointment response status: {response.status_code}")
+        print(f"n8n appointment response: {response.text}")
+        
+        if response.status_code == 200:
+            try:
+                result = response.json()
+                print(f"n8n appointment parsed result: {result}")
+                return result
+            except:
+                # If response isn't JSON, assume success
+                return {'success': True, 'message': 'Appointment request processed successfully.'}
+        else:
+            print(f"n8n appointment error: {response.text}")
+            return {'success': False, 'message': 'Scheduling service unavailable right now.'}
+            
     except Exception as e:
-        app.logger.error(f"Health check failed: {e}")
-        return jsonify({
-            'status': 'unhealthy',
-            'error': str(e)
-        }), 500
+        print(f"Error sending appointment to n8n: {str(e)}")
+        return {'success': False, 'message': 'Could not process appointment request.'}
 
-@app.route('/test-webhook', methods=['POST'])
-def test_webhook():
-    """Test endpoint to verify n8n webhook"""
+def get_ai_response(message):
+    """Get AI response from Ollama"""
     try:
-        test_email = "test@example.com"
-        success = send_to_n8n(test_email, "Test webhook from health check")
+        # Enhanced system prompt for business context
+        system_prompt = """You are an AI assistant for Optivus, an AI document intelligence platform. 
+        You help businesses understand how AI can transform their document processing, data extraction, and workflow automation.
         
-        return jsonify({
-            'webhook_test': 'success' if success else 'failed',
-            'test_email': test_email,
-            'webhook_url': app.config.get('N8N_WEBHOOK_URL', 'Not configured')
-        })
+        Key capabilities you can discuss:
+        - Document parsing and data extraction
+        - Automated workflow processing
+        - Business intelligence from documents
+        - Integration with existing systems
+        - ROI and efficiency improvements
+        
+        Be helpful, professional, and focus on business value. If someone asks about scheduling or meetings, 
+        suggest they can schedule a consultation."""
+        
+        full_prompt = f"{system_prompt}\n\nUser question: {message}\n\nResponse:"
+        
+        response = requests.post(
+            OLLAMA_URL,
+            json={
+                'model': 'llama3.2',
+                'prompt': full_prompt,
+                'stream': False
+            },
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            ai_response = response.json().get('response', '').strip()
+            if ai_response:
+                return ai_response
+            else:
+                return "I'd be happy to help you learn about AI document intelligence! What specific aspect interests you most?"
+        else:
+            print(f"Ollama error: {response.status_code} - {response.text}")
+            return "I'm here to help you understand how AI can transform your business operations. What would you like to know?"
+    
     except Exception as e:
-        return jsonify({
-            'webhook_test': 'error',
-            'error': str(e)
-        }), 500
-
-# Error handlers
-@app.errorhandler(404)
-def not_found(error):
-    return render_template('index.html'), 404
-
-@app.errorhandler(413)
-def too_large(error):
-    return jsonify({'error': 'File too large'}), 413
-
-@app.errorhandler(500)
-def internal_error(error):
-    app.logger.error(f"Internal error: {error}")
-    return jsonify({'error': 'Internal server error'}), 500
+        print(f"Error getting AI response: {str(e)}")
+        return "I'm here to help you learn about AI solutions for your business. What questions do you have?"
 
 if __name__ == '__main__':
-    # Production vs Development settings
-    debug_mode = os.environ.get('FLASK_ENV') != 'production'
-    port = int(os.environ.get('PORT', 8000))
+    # Update this URL with your actual n8n webhook URL
+    print("🚀 Starting Flask app...")
+    print(f"📧 n8n webhook: {N8N_WEBHOOK_URL}")
+    print("💡 Don't forget to update your n8n webhook URL!")
     
-    if debug_mode:
-        print("🚀 Starting Flask RAG System...")
-        print(f"📱 Main page: http://localhost:{port}/")
-        print("⚠️  Running in development mode")
-    
-    app.run(
-        debug=debug_mode,
-        host='0.0.0.0',
-        port=port
-    )
+    app.run(debug=True, host='0.0.0.0', port=5000)
