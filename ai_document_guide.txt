@@ -187,7 +187,7 @@ AI Document Intelligence is an enterprise-grade solution that digitizes and inte
 ## Frequently Asked Questions
 
 ### Q: How long does implementation take?
-A: Typical implementation takes 8-12 weeks, depending on document volume and complexity. Pilot programs can be deployed in 2-4 weeks.
+A: Typical implementation takes 2-4 weeks, depending on document volume and complexity. Pilot programs can be deployed in 2-4 weeks.
 
 ### Q: Can the system integrate with our existing software?
 A: Yes, we provide APIs and pre-built connectors for popular enterprise software including SharePoint, Salesforce, SAP, and Office 365.

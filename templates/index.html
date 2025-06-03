@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Document Intelligence - Transform Your Business</title>
+    <title>Optivus - AI Business Intelligence</title>
     <meta name="description" content="Experience the power of AI document intelligence. Ask questions about business documents and get instant, accurate answers.">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>">
     
     <style>
         * {
@@ -40,7 +41,7 @@
         }
 
         .header {
-            margin-bottom: 80px;
+            margin-bottom: 40px;
             opacity: 0;
             animation: fadeInUp 0.8s ease-out 0.2s forwards;
         }
@@ -62,12 +63,49 @@
             font-weight: 400;
         }
 
+        .chat-history {
+            max-height: 400px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            padding: 0 10px;
+        }
+
+        .message {
+            margin-bottom: 25px;
+            padding: 20px 25px;
+            border-radius: 20px;
+            max-width: 85%;
+            word-wrap: break-word;
+            line-height: 1.6;
+            font-size: 1.1rem;
+        }
+
+        .user-message {
+            background: rgba(79, 143, 240, 0.2);
+            margin-left: auto;
+            text-align: right;
+            color: #e2e8f0;
+            border: 1px solid rgba(79, 143, 240, 0.3);
+        }
+
+        .ai-message {
+            background: rgba(255, 255, 255, 0.1);
+            margin-right: auto;
+            text-align: left;
+            color: #e2e8f0;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+
+        .ai-message.success-message {
+            background: rgba(16, 185, 129, 0.2);
+            border: 1px solid rgba(16, 185, 129, 0.4);
+        }
+
         .response-area {
             min-height: 200px;
             max-height: 400px;
             display: flex;
-            align-items: flex-start;
-            justify-content: center;
+            flex-direction: column;
             margin-bottom: 60px;
             padding: 40px 20px;
             opacity: 0;
@@ -76,43 +114,12 @@
             overflow-x: hidden;
         }
 
-        .response-text {
-            font-size: 1.8rem;
-            line-height: 1.4;
-            font-weight: 300;
-            text-align: center;
-            color: #e2e8f0;
-            max-width: 700px;
-            word-wrap: break-word;
-            overflow-wrap: break-word;
-            width: 100%;
-            max-height: 360px;
-            overflow-y: auto;
-            padding-right: 10px;
-        }
-
-        .response-text::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        .response-text::-webkit-scrollbar-track {
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 3px;
-        }
-
-        .response-text::-webkit-scrollbar-thumb {
-            background: rgba(79, 143, 240, 0.5);
-            border-radius: 3px;
-        }
-
-        .response-text::-webkit-scrollbar-thumb:hover {
-            background: rgba(79, 143, 240, 0.7);
-        }
-
         .placeholder-text {
             color: #94a3b8;
             font-style: italic;
             font-size: 1.6rem;
+            text-align: center;
+            margin: auto;
         }
 
         .typing-indicator {
@@ -263,6 +270,18 @@
             color: #4f8ff0;
         }
 
+        .success-message {
+            color: #10b981;
+            font-weight: 400;
+        }
+
+        .email-captured {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
         .error-message {
             color: #f87171;
             font-size: 0.9rem;
@@ -307,9 +326,10 @@
             }
             
             .response-area {
-                padding: 30px 15px;
-                margin-bottom: 40px;
-                min-height: 160px;
+                padding: 15px;
+                margin-bottom: 30px;
+                height: calc(100vh - 400px);
+                min-height: 300px;
             }
             
             .features {
@@ -379,9 +399,12 @@
                 </h1>
             </div>
 
-            <div class="response-area">
-                <div class="response-text placeholder-text" id="responseText">
+            <div class="response-area" id="responseArea">
+                <div class="placeholder-text" id="placeholderText">
                     Ask me about business processes, technology, or how AI can transform your operations.
+                </div>
+                <div class="chat-history" id="chatHistory" style="display: none;">
+                    <!-- Messages will be added here -->
                 </div>
                 <div class="typing-indicator" id="typingIndicator">
                     <span class="dot"></span>
@@ -396,7 +419,7 @@
                         type="text" 
                         class="chat-input" 
                         id="chatInput" 
-                        placeholder="Type your question here..."
+                        placeholder="Ask about AI solutions or enter your email..."
                         maxlength="300"
                         autocomplete="off"
                     >
@@ -415,18 +438,21 @@
     </div>
 
     <div class="footer">
-        <span class="footer-link" id="moreLink">More</span>
+        <a href="/more" class="footer-link">MORE</a>
     </div>
 
     <script>
         const chatInput = document.getElementById('chatInput');
         const sendButton = document.getElementById('sendButton');
-        const responseText = document.getElementById('responseText');
+        const chatHistory = document.getElementById('chatHistory');
+        const placeholderText = document.getElementById('placeholderText');
         const typingIndicator = document.getElementById('typingIndicator');
         const errorMessage = document.getElementById('errorMessage');
-        const moreLink = document.getElementById('moreLink');
 
         let isLoading = false;
+        let conversationStarted = false;
+        let awaitingSchedulingDecision = false;
+        let awaitingEmailAndTime = false;
 
         function showError(message) {
             errorMessage.textContent = message;
@@ -441,29 +467,70 @@
         }
 
         function showTypingIndicator() {
-            responseText.style.display = 'none';
             typingIndicator.style.display = 'block';
         }
 
         function hideTypingIndicator() {
             typingIndicator.style.display = 'none';
-            responseText.style.display = 'block';
         }
 
-        function typeWriter(text, element) {
-            element.textContent = '';
-            element.classList.remove('placeholder-text');
+        function parseEmailAndTime(message) {
+            const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/;
+            const emailMatch = message.match(emailRegex);
+            
+            if (emailMatch) {
+                const email = emailMatch[1];
+                const timeText = message.replace(email, '').trim();
+                return {
+                    email: email,
+                    time: timeText || null
+                };
+            }
+            return null;
+        }
+
+        function addUserMessage(message) {
+            console.log('Adding user message:', message);
+            console.log('Conversation started:', conversationStarted);
+            
+            if (!conversationStarted) {
+                placeholderText.style.display = 'none';
+                chatHistory.style.display = 'block';
+                conversationStarted = true;
+                console.log('Started conversation, hiding placeholder');
+            }
+
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message user-message';
+            messageDiv.textContent = message;
+            chatHistory.appendChild(messageDiv);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+            console.log('User message added to DOM');
+        }
+
+        function addAIMessage(message, isSuccess = false) {
+            console.log('Adding AI message:', message.substring(0, 50) + '...');
+            console.log('Is success message:', isSuccess);
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ai-message ${isSuccess ? 'success-message' : ''}`;
+            
+            chatHistory.appendChild(messageDiv);
+            
+            // Type writer effect
             let i = 0;
             const speed = 20;
             
             function type() {
-                if (i < text.length) {
-                    element.textContent += text.charAt(i);
+                if (i < message.length) {
+                    messageDiv.textContent += message.charAt(i);
                     i++;
                     setTimeout(type, speed);
+                    chatHistory.scrollTop = chatHistory.scrollHeight;
                 }
             }
             type();
+            console.log('AI message added to DOM');
         }
 
         function setLoadingState(loading) {
@@ -483,6 +550,11 @@
             if (!message || isLoading) return;
 
             hideError();
+            
+            // Add user message to chat FIRST
+            addUserMessage(message);
+            
+            // Clear input and set loading
             chatInput.value = '';
             setLoadingState(true);
             showTypingIndicator();
@@ -495,7 +567,9 @@
                     },
                     body: JSON.stringify({
                         message: message,
-                        model: 'llama3.2'
+                        model: 'llama3.2',
+                        awaiting_scheduling_decision: awaitingSchedulingDecision,
+                        awaiting_email_and_time: awaitingEmailAndTime
                     })
                 });
 
@@ -509,18 +583,42 @@
                 setLoadingState(false);
                 
                 if (data.response) {
-                    typeWriter(data.response, responseText);
+                    const askForScheduling = data.ask_for_scheduling === true;
+                    const askForEmailAndTime = data.ask_for_email_and_time === true;
+                    const appointmentConfirmed = data.appointment_confirmed === true;
+                    const appointmentBusy = data.appointment_busy === true;
+                    
+                    addAIMessage(data.response, appointmentConfirmed);
+                    
+                    // Update conversation state
+                    if (askForScheduling) {
+                        awaitingSchedulingDecision = true;
+                        awaitingEmailAndTime = false;
+                        setTimeout(() => {
+                            chatInput.placeholder = "Type 'yes' to schedule a consultation...";
+                        }, 2000);
+                    } else if (askForEmailAndTime) {
+                        awaitingSchedulingDecision = false;
+                        awaitingEmailAndTime = true;
+                        setTimeout(() => {
+                            chatInput.placeholder = "Enter your email and preferred time (e.g., 'john@email.com tomorrow at 2pm')";
+                        }, 2000);
+                    } else if (appointmentConfirmed || appointmentBusy) {
+                        awaitingSchedulingDecision = false;
+                        awaitingEmailAndTime = false;
+                        setTimeout(() => {
+                            chatInput.placeholder = "Feel free to ask another question...";
+                        }, 2000);
+                    }
                 } else {
-                    responseText.textContent = 'Sorry, I couldn\'t process your request.';
-                    responseText.classList.remove('placeholder-text');
+                    addAIMessage('Sorry, I couldn\'t process your request.');
                 }
                 
             } catch (error) {
                 hideTypingIndicator();
                 setLoadingState(false);
                 showError('Connection error. Please try again.');
-                responseText.textContent = 'Unable to connect. Please check your connection and try again.';
-                responseText.classList.remove('placeholder-text');
+                addAIMessage('Unable to connect. Please check your connection and try again.');
             }
         }
 
@@ -538,12 +636,6 @@
             setTimeout(() => {
                 chatInput.focus();
             }, 100);
-        });
-
-        // More link
-        moreLink.addEventListener('click', function(e) {
-            e.preventDefault();
-            alert('Coming soon - Learn more about AI document intelligence solutions');
         });
     </script>
 </body>
