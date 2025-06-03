@@ -1,14 +1,23 @@
 from flask import Flask, request, jsonify, render_template
 import requests
 import re
+import json
 from datetime import datetime
 import os
+import logging
 
 app = Flask(__name__)
 
-# Configuration - Update this with your actual n8n webhook URL
-N8N_WEBHOOK_URL = "https://cdmcatx69.app.n8n.cloud/webhook/3e2f713d-441c-462d-a206-5ced7dc503e4"
+# Configuration - UPDATE THIS WITH YOUR ACTUAL WEBHOOK URL FROM N8N
+N8N_AI_AGENT_WEBHOOK = "https://cdmcatx69.app.n8n.cloud/webhook/4a6fef26-13d2-4b2f-91ff-31db71d58063"  # Production webhook
 OLLAMA_URL = "http://localhost:11434/api/generate"
+
+# In-memory conversation storage
+conversation_history = {}
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 @app.route('/')
 def index():
@@ -23,219 +32,265 @@ def chat():
     try:
         data = request.get_json()
         message = data.get('message', '').strip()
-        message_lower = message.lower()
-        awaiting_scheduling_decision = data.get('awaiting_scheduling_decision', False)
-        awaiting_email_and_time = data.get('awaiting_email_and_time', False)
+        conversation_id = data.get('conversation_id', f"conv_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+        awaiting_scheduling_response = data.get('awaiting_scheduling_response', False)
         
-        print(f"Received message: {message}")
-        print(f"Awaiting scheduling decision: {awaiting_scheduling_decision}")
-        print(f"Awaiting email and time: {awaiting_email_and_time}")
+        logger.info(f"Received message: {message[:50]}...")
+        logger.info(f"Awaiting scheduling response: {awaiting_scheduling_response}")
         
-        # Step 1: Check if we're waiting for scheduling decision (yes/no)
-        if awaiting_scheduling_decision:
-            if any(word in message_lower for word in ['yes', 'sure', 'okay', 'ok', 'schedule', 'book', 'definitely', 'absolutely']):
-                return jsonify({
-                    'response': "Great! Please provide your email address and preferred time in one message. For example: 'john@email.com tomorrow at 2pm' or 'sarah@company.com next Tuesday morning'",
-                    'ask_for_email_and_time': True
-                })
-            else:
-                return jsonify({
-                    'response': "No problem! Feel free to ask me any other questions about how AI document intelligence can help your business.",
-                    'conversation_reset': True
-                })
+        # Initialize conversation history if new
+        if conversation_id not in conversation_history:
+            conversation_history[conversation_id] = {
+                'messages': [],
+                'transferred_to_agent': False
+            }
         
-        # Step 2: Check if we're waiting for email and time
-        elif awaiting_email_and_time:
-            email_and_time = parse_email_and_time(message)
-            
-            if email_and_time and email_and_time['email'] and email_and_time['time']:
-                print(f"Parsed email: {email_and_time['email']}, time: {email_and_time['time']}")
+        conv_data = conversation_history[conversation_id]
+        
+        # Add user message to history
+        conv_data['messages'].append({
+            'role': 'user',
+            'content': message,
+            'timestamp': datetime.now().isoformat()
+        })
+        
+        # If we're waiting for scheduling response (yes/no)
+        if awaiting_scheduling_response:
+            if is_affirmative_response(message):
+                logger.info("User wants to schedule, transferring to n8n AI agent")
                 
-                # Send to n8n for appointment processing
-                appointment_result = send_to_n8n_appointment(
-                    email_and_time['email'], 
-                    email_and_time['time']
-                )
+                # Mark as transferred
+                conv_data['transferred_to_agent'] = True
                 
-                print(f"n8n appointment result: {appointment_result}")
+                # Create context summary for n8n
+                conversation_summary = create_conversation_summary(conv_data)
+                transfer_message = f"User wants to schedule a consultation. Previous conversation context: {conversation_summary}"
                 
-                if appointment_result.get('success'):
-                    return jsonify({
-                        'response': appointment_result.get('message', 'Perfect! I\'ve scheduled your consultation. You\'ll receive a confirmation email shortly with all the details.'),
-                        'appointment_confirmed': True
+                # Send to n8n AI agent
+                scheduling_response = send_to_n8n_ai_agent(transfer_message, conversation_id, conv_data)
+                
+                if scheduling_response.get('success'):
+                    response_data = scheduling_response.get('data', {})
+                    logger.info(f"N8N Response Data: {response_data}")
+                    
+                    # Handle both 'message' and 'output' keys from N8N
+                    ai_response = (
+                        response_data.get('message') or 
+                        response_data.get('output') or 
+                        'Great! Let me help you schedule that consultation. When would work best for you?'
+                    )
+                    
+                    logger.info(f"Extracted AI Response: {ai_response}")
+                    
+                    conv_data['messages'].append({
+                        'role': 'assistant',
+                        'content': ai_response,
+                        'timestamp': datetime.now().isoformat(),
+                        'source': 'n8n_agent'
                     })
-                elif appointment_result.get('busy'):
+                    
                     return jsonify({
-                        'response': appointment_result.get('message', 'That time slot is already booked. Could you suggest another time?'),
-                        'appointment_busy': True
+                        'response': ai_response,
+                        'conversation_id': conversation_id,
+                        'transferred_to_agent': True,
+                        'action_type': 'scheduling_initiated'
                     })
                 else:
+                    # Fallback if n8n unavailable
+                    ai_response = "Perfect! I'd love to help you schedule a consultation. Please provide your email and preferred time (e.g., 'john@email.com tomorrow at 2pm') and I'll get that set up for you."
+                    
+                    conv_data['messages'].append({
+                        'role': 'assistant',
+                        'content': ai_response,
+                        'timestamp': datetime.now().isoformat(),
+                        'source': 'manual_scheduling'
+                    })
+                    
                     return jsonify({
-                        'response': "I'm having trouble with scheduling right now. Could you try again in a moment, or I'll have someone reach out to you directly?",
-                        'appointment_busy': True
+                        'response': ai_response,
+                        'conversation_id': conversation_id,
+                        'transferred_to_agent': False,
+                        'action_type': 'manual_scheduling'
                     })
             else:
+                # User declined scheduling
+                ai_response = "No problem! Feel free to ask me any other questions about AI document intelligence and how it can help your business."
+                
+                conv_data['messages'].append({
+                    'role': 'assistant',
+                    'content': ai_response,
+                    'timestamp': datetime.now().isoformat(),
+                    'source': 'local_llm'
+                })
+                
                 return jsonify({
-                    'response': "I couldn't find both an email and time in your message. Please try again with format like: 'john@email.com tomorrow at 2pm'",
-                    'ask_for_email_and_time': True
+                    'response': ai_response,
+                    'conversation_id': conversation_id,
+                    'awaiting_scheduling_response': False
                 })
         
-        # Step 3: Check if this is just an email (for original email capture flow)
-        elif is_valid_email(message):
-            print(f"Valid email detected: {message}")
-            email_result = send_to_n8n_email(message)
+        # If already transferred to n8n, route everything there
+        elif conv_data['transferred_to_agent']:
+            logger.info("Routing to n8n agent - user is in scheduling flow")
             
-            if email_result.get('success'):
+            scheduling_response = send_to_n8n_ai_agent(message, conversation_id, conv_data)
+            
+            if scheduling_response.get('success'):
+                response_data = scheduling_response.get('data', {})
+                
+                # Handle both 'message' and 'output' keys from N8N
+                ai_response = (
+                    response_data.get('message') or 
+                    response_data.get('output') or 
+                    'Let me help you with that.'
+                )
+                
+                conv_data['messages'].append({
+                    'role': 'assistant',
+                    'content': ai_response,
+                    'timestamp': datetime.now().isoformat(),
+                    'source': 'n8n_agent'
+                })
+                
                 return jsonify({
-                    'response': "Thank you! We've received your email and will be in touch within 24 hours to schedule your free consultation. We're excited to discuss how AI document intelligence can transform your business!",
-                    'email_captured': True
+                    'response': ai_response,
+                    'conversation_id': conversation_id,
+                    'transferred_to_agent': True,
+                    'action_type': response_data.get('action_type', 'scheduling')
                 })
             else:
+                # Fallback
+                ai_response = "I'm having trouble with the scheduling system. Could you provide your email and preferred time, and I'll have someone reach out to you directly?"
+                
+                conv_data['messages'].append({
+                    'role': 'assistant',
+                    'content': ai_response,
+                    'timestamp': datetime.now().isoformat(),
+                    'source': 'fallback'
+                })
+                
                 return jsonify({
-                    'response': "Thank you for your email! There was a small issue saving it, but I've noted it down. We'll be in touch soon!",
-                    'email_captured': True
+                    'response': ai_response,
+                    'conversation_id': conversation_id,
+                    'transferred_to_agent': False
                 })
         
-        # Step 4: Regular conversation - check if they want to schedule
+        # Regular conversation with local LLM + scheduling offer
         else:
-            # Check if message indicates wanting to schedule
-            schedule_keywords = [
-                'schedule', 'appointment', 'meeting', 'consultation', 'book', 
-                'call', 'demo', 'talk', 'discuss', 'meet', 'setup', 'set up',
-                'calendar', 'available', 'time', 'when can'
-            ]
-            wants_to_schedule = any(keyword in message_lower for keyword in schedule_keywords)
+            # Get response from local LLM
+            local_response = get_local_ai_response_with_history(conv_data)
             
-            if wants_to_schedule:
-                return jsonify({
-                    'response': "I'd be happy to help you schedule a consultation! Our AI document intelligence platform can transform how your business processes documents, extracts insights, and automates workflows. Would you like to schedule a free 30-minute consultation to discuss your specific needs?",
-                    'ask_for_scheduling': True
-                })
-            else:
-                # Regular AI chat using Ollama
-                ai_response = get_ai_response(message)
-                return jsonify({'response': ai_response})
+            # Always add scheduling offer at the end
+            enhanced_response = f"{local_response}\n\nWould you like to schedule a brief consultation to learn more about how this could work for your specific situation?"
+            
+            # Add to conversation history
+            conv_data['messages'].append({
+                'role': 'assistant',
+                'content': enhanced_response,
+                'timestamp': datetime.now().isoformat(),
+                'source': 'local_llm'
+            })
+            
+            return jsonify({
+                'response': enhanced_response,
+                'conversation_id': conversation_id,
+                'awaiting_scheduling_response': True,
+                'ask_for_scheduling': True
+            })
     
     except Exception as e:
-        print(f"Error in chat route: {str(e)}")
+        logger.error(f"Error in chat route: {str(e)}")
         return jsonify({'error': 'Something went wrong. Please try again.'}), 500
 
-def is_valid_email(email):
-    """Check if string is a valid email format"""
-    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    return re.match(pattern, email) is not None
-
-def parse_email_and_time(message):
-    """Extract email and time from user message"""
-    email_pattern = r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})'
-    email_match = re.search(email_pattern, message)
+def create_conversation_summary(conv_data):
+    """Create a brief summary of the conversation for n8n"""
+    messages = conv_data['messages']
+    user_messages = [msg['content'] for msg in messages if msg['role'] == 'user']
     
-    if email_match:
-        email = email_match.group(1)
-        # Remove email from message to get time portion
-        time_text = re.sub(email_pattern, '', message).strip()
-        # Clean up the time text
-        time_text = re.sub(r'^[,\s]+|[,\s]+$', '', time_text)  # Remove leading/trailing commas and spaces
-        
-        return {
-            'email': email,
-            'time': time_text if time_text else None
-        }
-    return None
+    if len(user_messages) > 1:
+        return f"User asked about: {user_messages[0][:100]}... Latest: {user_messages[-1][:100]}"
+    elif len(user_messages) == 1:
+        return f"User asked: {user_messages[0][:100]}"
+    else:
+        return "User interested in learning more"
 
-def send_to_n8n_email(email):
-    """Send email to n8n workflow for processing"""
-    try:
-        payload = {
-            'type': 'email',
-            'email': email,
-            'timestamp': datetime.now().isoformat(),
-            'source': 'website_chat'
-        }
-        
-        print(f"Sending email to n8n: {payload}")
-        
-        response = requests.post(
-            N8N_WEBHOOK_URL,
-            json=payload,
-            timeout=10
-        )
-        
-        print(f"n8n email response status: {response.status_code}")
-        
-        if response.status_code == 200:
-            return {'success': True}
-        else:
-            print(f"n8n email error: {response.text}")
-            return {'success': False}
-            
-    except Exception as e:
-        print(f"Error sending email to n8n: {str(e)}")
-        return {'success': False}
+def is_affirmative_response(message):
+    """Check if user response is affirmative for scheduling"""
+    message_lower = message.lower().strip()
+    
+    affirmative_keywords = [
+        'yes', 'yeah', 'yep', 'sure', 'okay', 'ok', 'definitely', 'absolutely',
+        'please', 'schedule', 'book', 'i would like', 'sounds good', 'that works',
+        'let\'s do it', 'go ahead', 'i\'m interested', 'sign me up', 'why not'
+    ]
+    
+    negative_keywords = [
+        'no', 'nope', 'not now', 'maybe later', 'not interested', 'no thanks',
+        'not today', 'i\'ll think about it', 'not right now'
+    ]
+    
+    # Check for negative responses first
+    if any(keyword in message_lower for keyword in negative_keywords):
+        return False
+    
+    # Check for affirmative responses
+    if any(keyword in message_lower for keyword in affirmative_keywords):
+        return True
+    
+    # Default to False if unclear
+    return False
 
-def send_to_n8n_appointment(email, time_preference):
-    """Send appointment request to n8n workflow"""
+def get_local_ai_response_with_history(conv_data):
+    """Get AI response from local Ollama with conversation history"""
     try:
-        payload = {
-            'type': 'appointment',
-            'email': email,
-            'time_preference': time_preference,
-            'timestamp': datetime.now().isoformat(),
-            'source': 'website_chat'
-        }
+        messages = conv_data['messages']
         
-        print(f"Sending appointment to n8n: {payload}")
+        # Build conversation context (last 6 messages for efficiency)
+        conversation_text = ""
+        for msg in messages[-6:]:
+            if msg['role'] == 'user':
+                conversation_text += f"Human: {msg['content']}\n"
+            elif msg['role'] == 'assistant' and msg.get('source') == 'local_llm':
+                # Only include local LLM responses, not scheduling responses
+                clean_content = msg['content'].split('\n\nWould you like to schedule')[0]  # Remove scheduling offer
+                conversation_text += f"Assistant: {clean_content}\n"
         
-        response = requests.post(
-            N8N_WEBHOOK_URL,
-            json=payload,
-            timeout=15
-        )
-        
-        print(f"n8n appointment response status: {response.status_code}")
-        print(f"n8n appointment response: {response.text}")
-        
-        if response.status_code == 200:
-            try:
-                result = response.json()
-                print(f"n8n appointment parsed result: {result}")
-                return result
-            except:
-                # If response isn't JSON, assume success
-                return {'success': True, 'message': 'Appointment request processed successfully.'}
-        else:
-            print(f"n8n appointment error: {response.text}")
-            return {'success': False, 'message': 'Scheduling service unavailable right now.'}
-            
-    except Exception as e:
-        print(f"Error sending appointment to n8n: {str(e)}")
-        return {'success': False, 'message': 'Could not process appointment request.'}
+        system_prompt = """You are an AI assistant for Optivus, an AI document intelligence and automation platform.
 
-def get_ai_response(message):
-    """Get AI response from Ollama"""
-    try:
-        # Enhanced system prompt for business context
-        system_prompt = """You are an AI assistant for Optivus, an AI document intelligence platform. 
-        You help businesses understand how AI can transform their document processing, data extraction, and workflow automation.
-        
-        Key capabilities you can discuss:
-        - Document parsing and data extraction
-        - Automated workflow processing
-        - Business intelligence from documents
-        - Integration with existing systems
-        - ROI and efficiency improvements
-        
-        Be helpful, professional, and focus on business value. If someone asks about scheduling or meetings, 
-        suggest they can schedule a consultation."""
-        
-        full_prompt = f"{system_prompt}\n\nUser question: {message}\n\nResponse:"
+Key information about Optivus:
+- We implement AI systems that process documents, extract data, and automate workflows
+- Our solutions provide 300-500% ROI within the first year  
+- We help businesses save 80% of time spent on document processing
+- We work with companies in finance, healthcare, legal, manufacturing, and other industries
+- Our platform handles PDFs, Word docs, Excel files, emails, and scanned documents
+- We integrate with existing business systems and provide 24/7 automation
+
+Your role:
+- Answer questions about AI, automation, and business process improvement
+- Explain how document intelligence can solve specific business problems
+- Be helpful and knowledgeable about AI/ML technologies
+- Build naturally on the conversation history
+- Keep responses concise but informative (2-4 sentences typically)
+- Focus on business value and practical applications
+- DO NOT mention scheduling or meetings - the system handles that separately
+
+Recent conversation context:
+""" + conversation_text
+
+        current_message = messages[-1]['content']
+        full_prompt = f"{system_prompt}\n\nHuman: {current_message}\n\nAssistant:"
         
         response = requests.post(
             OLLAMA_URL,
             json={
                 'model': 'llama3.2',
                 'prompt': full_prompt,
-                'stream': False
+                'stream': False,
+                'options': {
+                    'temperature': 0.7,
+                    'top_p': 0.9,
+                    'max_tokens': 200
+                }
             },
             timeout=30
         )
@@ -245,19 +300,95 @@ def get_ai_response(message):
             if ai_response:
                 return ai_response
             else:
-                return "I'd be happy to help you learn about AI document intelligence! What specific aspect interests you most?"
+                return "I'd be happy to help you understand how AI document intelligence can transform your business operations!"
         else:
-            print(f"Ollama error: {response.status_code} - {response.text}")
-            return "I'm here to help you understand how AI can transform your business operations. What would you like to know?"
+            logger.error(f"Ollama error: {response.status_code}")
+            return "I'm here to help you understand how AI can streamline your business processes."
     
     except Exception as e:
-        print(f"Error getting AI response: {str(e)}")
-        return "I'm here to help you learn about AI solutions for your business. What questions do you have?"
+        logger.error(f"Error getting local AI response: {str(e)}")
+        return "I'm here to help you learn about AI automation solutions for your business."
+
+def send_to_n8n_ai_agent(message, conversation_id, conv_data):
+    """Send message to N8N AI agent"""
+    try:
+        payload = {
+            'message': message,
+            'conversation_id': conversation_id,
+            'timestamp': datetime.now().isoformat(),
+            'source': 'website_chat_transfer'
+        }
+        
+        logger.info(f"Sending to N8N: {message[:50]}...")
+        
+        response = requests.post(
+            N8N_AI_AGENT_WEBHOOK,
+            json=payload,
+            timeout=30
+        )
+        
+        logger.info(f"N8N response status: {response.status_code}")
+        
+        if response.status_code == 200:
+            try:
+                result = response.json()
+                logger.info(f"Raw N8N JSON Response: {result}")
+                
+                # Handle if n8n returns an array (list) instead of object
+                if isinstance(result, list) and len(result) > 0:
+                    result = result[0]  # Take the first item
+                
+                return {'success': True, 'data': result}
+            except Exception as e:
+                logger.error(f"Failed to parse N8N JSON: {e}")
+                logger.info(f"N8N Raw Text Response: {response.text}")
+                return {
+                    'success': True, 
+                    'data': {
+                        'message': response.text,
+                        'action_type': 'scheduling'
+                    }
+                }
+        else:
+            logger.error(f"N8N error: {response.status_code}")
+            return {'success': False}
+            
+    except Exception as e:
+        logger.error(f"Error sending to N8N: {str(e)}")
+        return {'success': False}
+
+# Health check endpoint
+@app.route('/health')
+def health_check():
+    return jsonify({
+        'status': 'healthy',
+        'timestamp': datetime.now().isoformat(),
+        'active_conversations': len(conversation_history),
+        'services': {
+            'n8n_ai_agent': check_n8n_availability(),
+            'ollama': check_ollama_availability()
+        }
+    })
+
+def check_n8n_availability():
+    try:
+        # Just check if the URL is reachable without sending data
+        response = requests.get(N8N_AI_AGENT_WEBHOOK.replace('/webhook-test/', '/webhook-health/'), timeout=5)
+        return True  # If no exception, assume it's available
+    except:
+        return False
+
+def check_ollama_availability():
+    try:
+        response = requests.get(OLLAMA_URL.replace('/api/generate', '/api/tags'), timeout=5)
+        return response.status_code == 200
+    except:
+        return False
 
 if __name__ == '__main__':
-    # Update this URL with your actual n8n webhook URL
-    print("🚀 Starting Flask app...")
-    print(f"📧 n8n webhook: {N8N_WEBHOOK_URL}")
-    print("💡 Don't forget to update your n8n webhook URL!")
+    logger.info("🚀 Starting Streamlined Flask app...")
+    logger.info(f"🤖 N8N AI Agent: {N8N_AI_AGENT_WEBHOOK}")
+    logger.info(f"🧠 Local LLM: {OLLAMA_URL}")
+    logger.info("📅 Every response now includes scheduling offer!")
     
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=8000)

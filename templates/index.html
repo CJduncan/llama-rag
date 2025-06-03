@@ -442,201 +442,317 @@
     </div>
 
     <script>
-        const chatInput = document.getElementById('chatInput');
-        const sendButton = document.getElementById('sendButton');
-        const chatHistory = document.getElementById('chatHistory');
-        const placeholderText = document.getElementById('placeholderText');
-        const typingIndicator = document.getElementById('typingIndicator');
-        const errorMessage = document.getElementById('errorMessage');
+        // Enhanced JavaScript for Smart Scheduling Flow
+const chatInput = document.getElementById('chatInput');
+const sendButton = document.getElementById('sendButton');
+const chatHistory = document.getElementById('chatHistory');
+const placeholderText = document.getElementById('placeholderText');
+const typingIndicator = document.getElementById('typingIndicator');
+const errorMessage = document.getElementById('errorMessage');
 
-        let isLoading = false;
-        let conversationStarted = false;
-        let awaitingSchedulingDecision = false;
-        let awaitingEmailAndTime = false;
+let isLoading = false;
+let conversationStarted = false;
+let conversationId = null;
+let awaitingSchedulingResponse = false;
+let transferredToAgent = false;
 
-        function showError(message) {
-            errorMessage.textContent = message;
-            errorMessage.classList.add('show');
-            setTimeout(() => {
-                errorMessage.classList.remove('show');
-            }, 5000);
-        }
+function generateConversationId() {
+    return 'conv_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+}
 
-        function hideError() {
-            errorMessage.classList.remove('show');
-        }
+function showError(message) {
+    errorMessage.textContent = message;
+    errorMessage.classList.add('show');
+    setTimeout(() => {
+        errorMessage.classList.remove('show');
+    }, 5000);
+}
 
-        function showTypingIndicator() {
-            typingIndicator.style.display = 'block';
-        }
+function hideError() {
+    errorMessage.classList.remove('show');
+}
 
-        function hideTypingIndicator() {
-            typingIndicator.style.display = 'none';
-        }
+function showTypingIndicator() {
+    typingIndicator.style.display = 'block';
+}
 
-        function parseEmailAndTime(message) {
-            const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/;
-            const emailMatch = message.match(emailRegex);
-            
-            if (emailMatch) {
-                const email = emailMatch[1];
-                const timeText = message.replace(email, '').trim();
-                return {
-                    email: email,
-                    time: timeText || null
-                };
-            }
-            return null;
-        }
+function hideTypingIndicator() {
+    typingIndicator.style.display = 'none';
+}
 
-        function addUserMessage(message) {
-            console.log('Adding user message:', message);
-            console.log('Conversation started:', conversationStarted);
-            
-            if (!conversationStarted) {
-                placeholderText.style.display = 'none';
-                chatHistory.style.display = 'block';
-                conversationStarted = true;
-                console.log('Started conversation, hiding placeholder');
-            }
+function addUserMessage(message) {
+    console.log('Adding user message:', message);
+    
+    if (!conversationStarted) {
+        placeholderText.style.display = 'none';
+        chatHistory.style.display = 'block';
+        conversationStarted = true;
+        conversationId = generateConversationId();
+        console.log('Started conversation with ID:', conversationId);
+    }
 
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'message user-message';
-            messageDiv.textContent = message;
-            chatHistory.appendChild(messageDiv);
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'message user-message';
+    messageDiv.textContent = message;
+    chatHistory.appendChild(messageDiv);
+    chatHistory.scrollTop = chatHistory.scrollHeight;
+}
+
+function addAIMessage(message, actionType = 'general', isSuccess = false) {
+    console.log('Adding AI message:', message.substring(0, 50) + '...');
+    console.log('Action type:', actionType);
+    
+    const messageDiv = document.createElement('div');
+    let className = `message ai-message`;
+    
+    // Style based on action type
+    switch(actionType) {
+        case 'scheduling_initiated':
+            className += ' scheduling-message';
+            break;
+        case 'calendar_booked':
+        case 'email_sent':
+            className += ' success-message';
+            isSuccess = true;
+            break;
+        case 'calendar_conflict':
+        case 'error':
+            className += ' warning-message';
+            break;
+        default:
+            if (isSuccess) className += ' success-message';
+    }
+    
+    messageDiv.className = className;
+    chatHistory.appendChild(messageDiv);
+    
+    // Enhanced typewriter effect
+    let i = 0;
+    const speed = actionType === 'calendar_booked' ? 15 : 25;
+    
+    function type() {
+        if (i < message.length) {
+            messageDiv.textContent += message.charAt(i);
+            i++;
+            setTimeout(type, speed);
             chatHistory.scrollTop = chatHistory.scrollHeight;
-            console.log('User message added to DOM');
-        }
-
-        function addAIMessage(message, isSuccess = false) {
-            console.log('Adding AI message:', message.substring(0, 50) + '...');
-            console.log('Is success message:', isSuccess);
-            
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `message ai-message ${isSuccess ? 'success-message' : ''}`;
-            
-            chatHistory.appendChild(messageDiv);
-            
-            // Type writer effect
-            let i = 0;
-            const speed = 20;
-            
-            function type() {
-                if (i < message.length) {
-                    messageDiv.textContent += message.charAt(i);
-                    i++;
-                    setTimeout(type, speed);
-                    chatHistory.scrollTop = chatHistory.scrollHeight;
-                }
-            }
-            type();
-            console.log('AI message added to DOM');
-        }
-
-        function setLoadingState(loading) {
-            isLoading = loading;
-            sendButton.disabled = loading;
-            chatInput.disabled = loading;
-            
-            if (loading) {
-                document.body.classList.add('loading');
-            } else {
-                document.body.classList.remove('loading');
+        } else {
+            // Add action indicators
+            if (actionType === 'scheduling_initiated') {
+                addActionIndicator('🤖 Connecting you with our scheduling AI...');
+            } else if (actionType === 'calendar_booked') {
+                addActionIndicator('📅 Meeting scheduled successfully!');
+            } else if (actionType === 'email_sent') {
+                addActionIndicator('📧 Confirmation email sent!');
             }
         }
+    }
+    type();
+}
 
-        async function sendMessage() {
-            const message = chatInput.value.trim();
-            if (!message || isLoading) return;
+function addActionIndicator(text) {
+    const indicator = document.createElement('div');
+    indicator.className = 'action-indicator';
+    indicator.textContent = text;
+    indicator.style.cssText = `
+        font-size: 0.9rem;
+        color: #10b981;
+        text-align: center;
+        margin: 10px 0;
+        padding: 8px;
+        background: rgba(16, 185, 129, 0.1);
+        border-radius: 20px;
+        border: 1px solid rgba(16, 185, 129, 0.3);
+        animation: fadeInUp 0.5s ease-out;
+    `;
+    chatHistory.appendChild(indicator);
+    chatHistory.scrollTop = chatHistory.scrollHeight;
+}
 
-            hideError();
-            
-            // Add user message to chat FIRST
-            addUserMessage(message);
-            
-            // Clear input and set loading
-            chatInput.value = '';
-            setLoadingState(true);
-            showTypingIndicator();
-            
-            try {
-                const response = await fetch('/chat', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        message: message,
-                        model: 'llama3.2',
-                        awaiting_scheduling_decision: awaitingSchedulingDecision,
-                        awaiting_email_and_time: awaitingEmailAndTime
-                    })
-                });
-
-                if (!response.ok) {
-                    throw new Error('Network error');
-                }
-
-                const data = await response.json();
-                
-                hideTypingIndicator();
-                setLoadingState(false);
-                
-                if (data.response) {
-                    const askForScheduling = data.ask_for_scheduling === true;
-                    const askForEmailAndTime = data.ask_for_email_and_time === true;
-                    const appointmentConfirmed = data.appointment_confirmed === true;
-                    const appointmentBusy = data.appointment_busy === true;
-                    
-                    addAIMessage(data.response, appointmentConfirmed);
-                    
-                    // Update conversation state
-                    if (askForScheduling) {
-                        awaitingSchedulingDecision = true;
-                        awaitingEmailAndTime = false;
-                        setTimeout(() => {
-                            chatInput.placeholder = "Type 'yes' to schedule a consultation...";
-                        }, 2000);
-                    } else if (askForEmailAndTime) {
-                        awaitingSchedulingDecision = false;
-                        awaitingEmailAndTime = true;
-                        setTimeout(() => {
-                            chatInput.placeholder = "Enter your email and preferred time (e.g., 'john@email.com tomorrow at 2pm')";
-                        }, 2000);
-                    } else if (appointmentConfirmed || appointmentBusy) {
-                        awaitingSchedulingDecision = false;
-                        awaitingEmailAndTime = false;
-                        setTimeout(() => {
-                            chatInput.placeholder = "Feel free to ask another question...";
-                        }, 2000);
-                    }
-                } else {
-                    addAIMessage('Sorry, I couldn\'t process your request.');
-                }
-                
-            } catch (error) {
-                hideTypingIndicator();
-                setLoadingState(false);
-                showError('Connection error. Please try again.');
-                addAIMessage('Unable to connect. Please check your connection and try again.');
-            }
+function setLoadingState(loading) {
+    isLoading = loading;
+    sendButton.disabled = loading;
+    chatInput.disabled = loading;
+    
+    if (loading) {
+        document.body.classList.add('loading');
+        if (transferredToAgent) {
+            chatInput.placeholder = "Agent is processing...";
+        } else {
+            chatInput.placeholder = "Thinking...";
         }
+    } else {
+        document.body.classList.remove('loading');
+        updatePlaceholderText();
+    }
+}
 
-        // Event listeners
-        sendButton.addEventListener('click', sendMessage);
+function updatePlaceholderText() {
+    if (awaitingSchedulingResponse) {
+        chatInput.placeholder = "Type 'yes' to schedule or 'no' to continue...";
+    } else if (transferredToAgent) {
+        chatInput.placeholder = "Continue with scheduling details...";
+    } else {
+        chatInput.placeholder = "Ask about AI solutions, automation, or document processing...";
+    }
+}
+
+async function sendMessage() {
+    const message = chatInput.value.trim();
+    if (!message || isLoading) return;
+
+    hideError();
+    
+    // Add user message first
+    addUserMessage(message);
+    
+    // Clear input and set loading
+    chatInput.value = '';
+    setLoadingState(true);
+    showTypingIndicator();
+    
+    try {
+        const payload = {
+            message: message,
+            conversation_id: conversationId,
+            awaiting_scheduling_response: awaitingSchedulingResponse
+        };
         
-        chatInput.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter' && !isLoading) {
-                sendMessage();
-            }
+        console.log('Sending payload:', payload);
+        
+        const response = await fetch('/chat', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload)
         });
 
-        // Focus input when page loads
-        window.addEventListener('load', function() {
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log('Received response:', data);
+        
+        hideTypingIndicator();
+        setLoadingState(false);
+        
+        if (data.response) {
+            const actionType = data.action_type || 'general';
+            const isSuccess = data.calendar_status === 'booked' || data.email_sent === true;
+            
+            addAIMessage(data.response, actionType, isSuccess);
+            
+            // Update conversation state
+            awaitingSchedulingResponse = data.awaiting_scheduling_response || false;
+            transferredToAgent = data.transferred_to_agent || transferredToAgent;
+            
+            // Update UI based on new state
             setTimeout(() => {
-                chatInput.focus();
-            }, 100);
+                updatePlaceholderText();
+            }, 1000);
+            
+            // Show transfer notification
+            if (data.transferred_to_agent && !transferredToAgent) {
+                setTimeout(() => {
+                    addActionIndicator('🔄 You\'re now connected to our scheduling specialist!');
+                }, 2000);
+            }
+            
+        } else if (data.error) {
+            addAIMessage('I apologize, but I encountered an issue. Please try again or contact support.');
+            showError(data.error);
+        }
+        
+    } catch (error) {
+        console.error('Chat error:', error);
+        hideTypingIndicator();
+        setLoadingState(false);
+        
+        if (error.message.includes('500')) {
+            showError('Server error. Please try again.');
+            addAIMessage('I\'m experiencing technical difficulties. Please try again in a moment.');
+        } else if (error.message.includes('timeout') || error.message.includes('fetch')) {
+            showError('Connection timeout. Please check your internet and try again.');
+            addAIMessage('Connection issue detected. Please check your internet connection and try again.');
+        } else {
+            showError('Something went wrong. Please try again.');
+            addAIMessage('I apologize for the technical issue. Please try your request again.');
+        }
+    }
+}
+
+// Event listeners
+sendButton.addEventListener('click', sendMessage);
+
+chatInput.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter' && !isLoading) {
+        sendMessage();
+    }
+});
+
+// Enhanced CSS for new message types
+const additionalStyles = `
+    .scheduling-message {
+        background: rgba(79, 143, 240, 0.15);
+        border: 1px solid rgba(79, 143, 240, 0.4);
+    }
+    
+    .warning-message {
+        background: rgba(251, 191, 36, 0.15);
+        border: 1px solid rgba(251, 191, 36, 0.4);
+        color: #fbbf24;
+    }
+    
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+`;
+
+// Add styles to document
+const styleSheet = document.createElement('style');
+styleSheet.textContent = additionalStyles;
+document.head.appendChild(styleSheet);
+
+// Health check and initialization
+window.addEventListener('load', function() {
+    // Check system health
+    fetch('/health')
+        .then(response => response.json())
+        .then(data => {
+            console.log('System health:', data);
+            if (!data.services.n8n_ai_agent) {
+                console.warn('N8N AI agent appears to be offline - scheduling may be limited');
+            }
+            if (!data.services.ollama) {
+                console.warn('Local AI appears to be offline');
+                showError('AI service temporarily unavailable. Some features may be limited.');
+            }
+        })
+        .catch(error => {
+            console.warn('Health check failed:', error);
         });
+    
+    // Focus input
+    setTimeout(() => {
+        chatInput.focus();
+    }, 100);
+    
+    // Initialize conversation
+    conversationId = generateConversationId();
+    console.log('Initialized with conversation ID:', conversationId);
+    
+    // Set initial placeholder
+    updatePlaceholderText();
+});
     </script>
 </body>
 </html>
