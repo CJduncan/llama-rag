@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
-from openai import OpenAI
+import openai
 import os
 import re
 import requests
@@ -44,23 +44,12 @@ CORS(app, origins=allowed_origins)
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
-# Global OpenAI client variable
-openai_client = None
-
-def initialize_openai():
-    """Initialize OpenAI client safely"""
-    global openai_client
-    try:
-        if app.config['OPENAI_API_KEY']:
-            openai_client = OpenAI(api_key=app.config['OPENAI_API_KEY'])
-            app.logger.info("✅ OpenAI API key configured successfully")
-            return True
-        else:
-            app.logger.error("❌ OPENAI_API_KEY not set!")
-            return False
-    except Exception as e:
-        app.logger.error(f"❌ Failed to initialize OpenAI: {e}")
-        return False
+# Initialize OpenAI with legacy approach
+if app.config['OPENAI_API_KEY']:
+    openai.api_key = app.config['OPENAI_API_KEY']
+    app.logger.info("✅ OpenAI API key configured successfully")
+else:
+    app.logger.error("❌ OPENAI_API_KEY not set!")
 
 class SimpleChatSystem:
     """Simplified chat system without document storage"""
@@ -159,10 +148,8 @@ Never oversell - be helpful and genuine. If they're not ready, that's fine. Prov
     def generate_response(self, query: str, model: str = None) -> str:
         """Generate response using OpenAI with business automation knowledge"""
         try:
-            # Initialize OpenAI if not already done
-            if not openai_client:
-                if not initialize_openai():
-                    return "❌ OpenAI service not available. Please try again later.\n\nWould you like a free consultation? Just share your email and we'll reach out!"
+            if not app.config['OPENAI_API_KEY']:
+                return "❌ OpenAI service not available. Please try again later.\n\nWould you like a free consultation? Just share your email and we'll reach out!"
             
             model = model or app.config['OPENAI_MODEL']
             
@@ -183,7 +170,8 @@ PRICING: {'Discuss costs briefly if asked.' if pricing_requested else 'No pricin
 
 Always end with a simple consultation offer."""
             
-            response = openai_client.chat.completions.create(
+            # Use legacy OpenAI API call
+            response = openai.ChatCompletion.create(
                 model=model,
                 messages=[
                     {
@@ -345,15 +333,14 @@ def health_check():
 def test_openai():
     """Test endpoint to verify OpenAI API"""
     try:
-        # Initialize OpenAI if not already done
-        if not openai_client:
-            if not initialize_openai():
-                return jsonify({
-                    'openai_test': 'failed',
-                    'error': 'API key not configured or initialization failed'
-                }), 400
+        if not app.config['OPENAI_API_KEY']:
+            return jsonify({
+                'openai_test': 'failed',
+                'error': 'API key not configured'
+            }), 400
         
-        response = openai_client.chat.completions.create(
+        # Use legacy OpenAI API call
+        response = openai.ChatCompletion.create(
             model=app.config['OPENAI_MODEL'],
             messages=[{'role': 'user', 'content': 'Hello, respond with just "OK"'}],
             max_tokens=10,
@@ -385,7 +372,7 @@ def internal_error(error):
 if __name__ == '__main__':
     # Print startup banner
     print("\n" + "="*60)
-    print("🚀 OPTIVUS AI CHAT SERVER (Simplified)")
+    print("🚀 OPTIVUS AI CHAT SERVER (Legacy OpenAI)")
     print("="*60)
     
     # Validate critical environment variables
