@@ -46,7 +46,7 @@ logging.basicConfig(level=logging.INFO)
 
 # Initialize OpenAI with legacy approach
 if app.config['OPENAI_API_KEY']:
-    openai.api_key = app.config['OPENAI_API_KEY']
+    openai.api_key = app.config['OPENAI_API_KEY'].strip()
     app.logger.info("✅ OpenAI API key configured successfully")
 else:
     app.logger.error("❌ OPENAI_API_KEY not set!")
