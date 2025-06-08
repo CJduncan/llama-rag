@@ -1,92 +1,3 @@
-# Railway Configuration for Your RAG Document Processing App
-
-# 1. Create requirements.txt with ALL your dependencies
-cat > requirements.txt << 'EOF'
-Flask==2.3.3
-flask-cors==4.0.0
-chromadb==0.4.15
-openai==1.3.0
-PyPDF2==3.0.1
-python-docx==1.1.0
-python-dotenv==1.0.0
-requests==2.31.0
-pathlib
-werkzeug==2.3.7
-gunicorn==21.2.0
-EOF
-
-# 2. Create Procfile for Railway
-cat > Procfile << 'EOF'
-web: python app.py
-EOF
-
-# 3. Create railway.json for proper configuration
-cat > railway.json << 'EOF'
-{
-  "$schema": "https://railway.app/railway.schema.json",
-  "build": {
-    "builder": "nixpacks"
-  },
-  "deploy": {
-    "startCommand": "python app.py",
-    "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 10
-  }
-}
-EOF
-
-# 4. Update your app.py to handle Railway's PORT environment variable
-# Replace the bottom section of your app.py with this:
-
-echo "
-# Add this to the bottom of your app.py file (replace existing if __name__ == '__main__': section)
-
-if __name__ == '__main__':
-    # Print startup banner
-    print(\"\\n\" + \"=\"*60)
-    print(\"🚀 OPTIVUS AI CHAT SERVER\")
-    print(\"=\"*60)
-    
-    # Validate critical environment variables
-    if not os.environ.get('OPENAI_API_KEY'):
-        print(\"❌ CRITICAL ERROR: OPENAI_API_KEY not found!\")
-        print(\"   Please set your OpenAI API key in Railway environment variables\")
-        exit(1)
-    
-    if not os.environ.get('SECRET_KEY'):
-        print(\"⚠️  WARNING: SECRET_KEY not set, using random key\")
-    
-    # Configuration summary
-    print(f\"\\n📋 Configuration:\")
-    print(f\"   OpenAI Model: {os.environ.get('OPENAI_MODEL', 'gpt-4o-mini')}\")
-    print(f\"   Environment: {os.environ.get('FLASK_ENV', 'development')}\")
-    print(f\"   Port: {os.environ.get('PORT', '8000')}\")
-    print(f\"   N8N Webhook: {'✅ Configured' if os.environ.get('N8N_WEBHOOK_URL') else '❌ Not set'}\")
-    
-    # Railway uses PORT environment variable
-    port = int(os.environ.get('PORT', 8000))
-    debug_mode = os.environ.get('FLASK_ENV') != 'production'
-    
-    print(f\"\\n🌐 Starting server on port {port}...\")
-    
-    if debug_mode:
-        print(\"   Mode: 🛠  Development (debug enabled)\")
-    else:
-        print(\"   Mode: 🏭 Production\")
-    
-    print(\"=\"*60 + \"\\n\")
-    
-    # For Railway, always use 0.0.0.0 and the PORT environment variable
-    app.run(
-        debug=debug_mode,
-        host='0.0.0.0',
-        port=port,
-        threaded=True
-    )
-"
-
-# 5. Create .gitignore to exclude local files
-cat > .gitignore << 'EOF'
 __pycache__/
 *.pyc
 *.pyo
@@ -112,4 +23,10 @@ uploads/
 chromadb/
 *.sqlite3
 .DS_Store
-EOF
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.development
+.env.test
+ai_chat_env/

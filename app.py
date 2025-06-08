@@ -112,131 +112,150 @@ class RAGSystem:
     
     def __init__(self, collection_name: str = "documents"):
         self.collection_name = collection_name
-        self.client = chromadb.PersistentClient(path="./chromadb")
-        self.collection = self.client.get_or_create_collection(name=collection_name)
         self.doc_processor = DocumentProcessor()
         
-        # Business automation knowledge base
+        # Initialize ChromaDB with error handling
+        try:
+            # Use in-memory client for Railway (no persistent storage needed for demo)
+            self.client = chromadb.Client()
+            
+            # Try to get or create collection with error handling
+            try:
+                self.collection = self.client.get_collection(name=collection_name)
+                app.logger.info(f"✅ Connected to existing ChromaDB collection: {collection_name}")
+            except Exception:
+                # Collection doesn't exist, create it
+                self.collection = self.client.create_collection(name=collection_name)
+                app.logger.info(f"✅ Created new ChromaDB collection: {collection_name}")
+                
+        except Exception as e:
+            app.logger.error(f"❌ ChromaDB initialization failed: {e}")
+            # Create a fallback that doesn't use ChromaDB
+            self.client = None
+            self.collection = None
+            app.logger.warning("⚠️  Running without document storage - chat will work but no document upload")
+        
+        # Business automation knowledge base (same as before)
         self.business_automation_context = """
         OPTIVUS BUSINESS AUTOMATION PLATFORM
         Key messaging:
-- We are a SMALL BUSINESS helping other SMALL BUSINESSES succeed
-- We understand the daily struggles of small business owners: wearing multiple hats, manual processes, never enough time
-- Our automation is AFFORDABLE and designed specifically for small businesses (not enterprise)
-- We focus on practical, immediate time-saving solutions
+    - We are a SMALL BUSINESS helping other SMALL BUSINESSES succeed
+    - We understand the daily struggles of small business owners: wearing multiple hats, manual processes, never enough time
+    - Our automation is AFFORDABLE and designed specifically for small businesses (not enterprise)
+    - We focus on practical, immediate time-saving solutions
 
-Common small business automation opportunities:
-1. Email management (customer inquiries, follow-ups)
-2. Appointment scheduling and reminders  
-3. Invoice generation and tracking
-4. Inventory alerts and management
-5. Customer follow-up sequences
-6. Lead capture and qualification
-7. Social media posting and responses
-8. Report generation from sales data
-9. After-hours customer support
-10. Integration between POS, accounting, and other tools
+    Common small business automation opportunities:
+    1. Email management (customer inquiries, follow-ups)
+    2. Appointment scheduling and reminders  
+    3. Invoice generation and tracking
+    4. Inventory alerts and management
+    5. Customer follow-up sequences
+    6. Lead capture and qualification
+    7. Social media posting and responses
+    8. Report generation from sales data
+    9. After-hours customer support
+    10. Integration between POS, accounting, and other tools
 
-Perfect for: Local restaurants, salons, auto shops, real estate agents, retailers, contractors, medical practices, fitness studios, accounting firms, cleaning services.
+    Perfect for: Local restaurants, salons, auto shops, real estate agents, retailers, contractors, medical practices, fitness studios, accounting firms, cleaning services.
 
-Tone: Friendly, understanding, fellow small business owner. Use "we understand" and "as fellow business owners" language. Focus on ROI, time savings, and simplicity.
+    Tone: Friendly, understanding, fellow small business owner. Use "we understand" and "as fellow business owners" language. Focus on ROI, time savings, and simplicity.
 
-When they show interest or ask about getting started, guide them toward scheduling a free 15-minute consultation to discuss their specific business needs.
+    When they show interest or ask about getting started, guide them toward scheduling a free 15-minute consultation to discuss their specific business needs.
 
-Never oversell - be helpful and genuine. If they're not ready, that's fine. Provide value regardless.
+    Never oversell - be helpful and genuine. If they're not ready, that's fine. Provide value regardless.
 
-        WHAT WE DO:
-        Optivus provides comprehensive AI-powered business automation solutions that transform how companies operate. We don't just process documents - we automate entire business workflows and processes.
+            WHAT WE DO:
+            Optivus provides comprehensive AI-powered business automation solutions that transform how companies operate. We don't just process documents - we automate entire business workflows and processes.
 
-        CORE AUTOMATION CAPABILITIES:
+            CORE AUTOMATION CAPABILITIES:
 
-        1. INTELLIGENT DOCUMENT PROCESSING
-        - Extract data from any document type (PDFs, Word, Excel, images, handwritten forms)
-        - Automatically categorize and route documents
-        - Convert unstructured data into structured business insights
-        - Process invoices, contracts, reports, and forms automatically
+            1. INTELLIGENT DOCUMENT PROCESSING
+            - Extract data from any document type (PDFs, Word, Excel, images, handwritten forms)
+            - Automatically categorize and route documents
+            - Convert unstructured data into structured business insights
+            - Process invoices, contracts, reports, and forms automatically
 
-        2. EMAIL AUTOMATION & MANAGEMENT
-        - Read and analyze incoming emails automatically
-        - Generate and send personalized email responses
-        - Route emails to appropriate departments/people
-        - Extract action items and deadlines from email conversations
-        - Automatically follow up on pending communications
+            2. EMAIL AUTOMATION & MANAGEMENT
+            - Read and analyze incoming emails automatically
+            - Generate and send personalized email responses
+            - Route emails to appropriate departments/people
+            - Extract action items and deadlines from email conversations
+            - Automatically follow up on pending communications
 
-        3. REPORT ANALYSIS & INSIGHTS
-        - Analyze financial reports, sales data, and performance metrics
-        - Generate automated summaries and insights
-        - Create executive dashboards with real-time data
-        - Identify trends, anomalies, and opportunities
-        - Provide data-driven recommendations
+            3. REPORT ANALYSIS & INSIGHTS
+            - Analyze financial reports, sales data, and performance metrics
+            - Generate automated summaries and insights
+            - Create executive dashboards with real-time data
+            - Identify trends, anomalies, and opportunities
+            - Provide data-driven recommendations
 
-        4. MEETING & CALENDAR AUTOMATION
-        - Schedule meetings based on availability and preferences
-        - Send meeting invitations and reminders automatically
-        - Analyze meeting notes and extract action items
-        - Follow up on meeting commitments and deadlines
-        - Coordinate complex multi-stakeholder scheduling
+            4. MEETING & CALENDAR AUTOMATION
+            - Schedule meetings based on availability and preferences
+            - Send meeting invitations and reminders automatically
+            - Analyze meeting notes and extract action items
+            - Follow up on meeting commitments and deadlines
+            - Coordinate complex multi-stakeholder scheduling
 
-        5. WORKFLOW AUTOMATION
-        - Connect different business systems and tools
-        - Automate repetitive tasks and processes
-        - Create intelligent decision trees for complex workflows
-        - Handle approvals, notifications, and escalations
-        - Streamline operations from lead to customer success
+            5. WORKFLOW AUTOMATION
+            - Connect different business systems and tools
+            - Automate repetitive tasks and processes
+            - Create intelligent decision trees for complex workflows
+            - Handle approvals, notifications, and escalations
+            - Streamline operations from lead to customer success
 
-        6. CUSTOMER SERVICE AUTOMATION
-        - Provide 24/7 intelligent customer support
-        - Analyze customer inquiries and route appropriately
-        - Generate personalized responses based on customer history
-        - Escalate complex issues to human agents when needed
-        - Track and resolve customer issues automatically
+            6. CUSTOMER SERVICE AUTOMATION
+            - Provide 24/7 intelligent customer support
+            - Analyze customer inquiries and route appropriately
+            - Generate personalized responses based on customer history
+            - Escalate complex issues to human agents when needed
+            - Track and resolve customer issues automatically
 
-        7. DATA INTEGRATION & SYNC
-        - Connect CRMs, ERPs, and other business systems
-        - Synchronize data across multiple platforms
-        - Maintain data consistency and accuracy
-        - Create unified views of business information
-        - Automate data entry and updates
+            7. DATA INTEGRATION & SYNC
+            - Connect CRMs, ERPs, and other business systems
+            - Synchronize data across multiple platforms
+            - Maintain data consistency and accuracy
+            - Create unified views of business information
+            - Automate data entry and updates
 
-        BUSINESS BENEFITS:
-        - Reduce manual work by 70-90%
-        - Eliminate human errors in repetitive tasks
-        - Operate 24/7 without breaks or holidays
-        - Scale operations without hiring more staff
-        - Free up employees for strategic, creative work
-        - Improve customer response times dramatically
-        - Ensure consistent quality and compliance
-        - Gain real-time insights into business performance
+            BUSINESS BENEFITS:
+            - Reduce manual work by 70-90%
+            - Eliminate human errors in repetitive tasks
+            - Operate 24/7 without breaks or holidays
+            - Scale operations without hiring more staff
+            - Free up employees for strategic, creative work
+            - Improve customer response times dramatically
+            - Ensure consistent quality and compliance
+            - Gain real-time insights into business performance
 
-        INDUSTRIES WE SERVE:
-        - Professional Services (Legal, Accounting, Consulting)
-        - Healthcare and Medical Practices
-        - Real Estate and Property Management
-        - Financial Services and Insurance
-        - Manufacturing and Supply Chain
-        - E-commerce and Retail
-        - Education and Training
-        - Non-profits and Government
+            INDUSTRIES WE SERVE:
+            - Professional Services (Legal, Accounting, Consulting)
+            - Healthcare and Medical Practices
+            - Real Estate and Property Management
+            - Financial Services and Insurance
+            - Manufacturing and Supply Chain
+            - E-commerce and Retail
+            - Education and Training
+            - Non-profits and Government
 
-        IMPLEMENTATION APPROACH:
-        - Start with high-impact, low-risk automation opportunities
-        - Integrate seamlessly with existing systems
-        - Provide comprehensive training and support
-        - Scale automation gradually based on success
-        - Continuous optimization and improvement
+            IMPLEMENTATION APPROACH:
+            - Start with high-impact, low-risk automation opportunities
+            - Integrate seamlessly with existing systems
+            - Provide comprehensive training and support
+            - Scale automation gradually based on success
+            - Continuous optimization and improvement
 
-        SECURITY & COMPLIANCE:
-        - Enterprise-grade security and encryption
-        - GDPR, HIPAA, and industry-specific compliance
-        - Data privacy and protection guaranteed
-        - Audit trails and monitoring
-        - On-premise or cloud deployment options
+            SECURITY & COMPLIANCE:
+            - Enterprise-grade security and encryption
+            - GDPR, HIPAA, and industry-specific compliance
+            - Data privacy and protection guaranteed
+            - Audit trails and monitoring
+            - On-premise or cloud deployment options
 
-        GETTING STARTED:
-        We offer free consultation sessions to identify automation opportunities specific to your business. Our experts analyze your current processes and provide a customized automation roadmap.
+            GETTING STARTED:
+            We offer free consultation sessions to identify automation opportunities specific to your business. Our experts analyze your current processes and provide a customized automation roadmap.
 
-        NOTE: Pricing information is provided only upon request during consultation sessions, as solutions are customized based on specific business needs and requirements.
-        """
+            NOTE: Pricing information is provided only upon request during consultation sessions, as solutions are customized based on specific business needs and requirements.
+            """
     
     def chunk_text(self, text: str, chunk_size: int = 1000, overlap: int = 200) -> List[str]:
         """Split text into overlapping chunks"""
@@ -265,6 +284,11 @@ Never oversell - be helpful and genuine. If they're not ready, that's fine. Prov
     def add_document(self, file_path: str, file_name: str) -> bool:
         """Add a document to the vector database"""
         try:
+            # If ChromaDB isn't available, return False
+            if not self.collection:
+                app.logger.warning("ChromaDB not available, cannot add documents")
+                return False
+                
             # Extract text based on file type
             file_extension = Path(file_path).suffix.lower()
             
@@ -315,6 +339,11 @@ Never oversell - be helpful and genuine. If they're not ready, that's fine. Prov
     def search_documents(self, query: str, n_results: int = 5) -> List[Dict]:
         """Search for relevant document chunks"""
         try:
+            # If ChromaDB isn't available, return empty results
+            if not self.collection:
+                app.logger.warning("ChromaDB not available, returning empty search results")
+                return []
+                
             results = self.collection.query(
                 query_texts=[query],
                 n_results=n_results
@@ -478,6 +507,8 @@ Always end with a simple consultation offer."""
     def get_document_count(self) -> int:
         """Get number of documents in the collection"""
         try:
+            if not self.collection:
+                return 0
             return self.collection.count()
         except:
             return 0
