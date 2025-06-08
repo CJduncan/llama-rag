@@ -766,15 +766,14 @@ if __name__ == '__main__':
     # Validate critical environment variables
     if not os.environ.get('OPENAI_API_KEY'):
         print("❌ CRITICAL ERROR: OPENAI_API_KEY not found!")
-        print("   Please create a .env file with your OpenAI API key:")
-        print("   OPENAI_API_KEY=sk-your-key-here")
-        print("\n   Or export it directly:")
-        print("   export OPENAI_API_KEY='sk-your-key-here'")
+        print("   Please set your OpenAI API key in Railway environment variables")
+        print("   Variable name: OPENAI_API_KEY")
+        print("   Value: sk-your-key-here")
         exit(1)
     
     if not os.environ.get('SECRET_KEY'):
-        print("⚠️  WARNING: SECRET_KEY not set, using random key (sessions won't persist)")
-        print("   Add to .env: SECRET_KEY=" + secrets.token_hex(32))
+        print("⚠️  WARNING: SECRET_KEY not set, generating random key")
+        print("   Add SECRET_KEY to Railway environment variables for production")
     
     # Configuration summary
     print(f"\n📋 Configuration:")
@@ -783,12 +782,11 @@ if __name__ == '__main__':
     print(f"   Port: {os.environ.get('PORT', '8000')}")
     print(f"   N8N Webhook: {'✅ Configured' if os.environ.get('N8N_WEBHOOK_URL') else '❌ Not set'}")
     
-    # Production vs Development settings
-    debug_mode = os.environ.get('FLASK_ENV') != 'production'
+    # Railway uses PORT environment variable - this is critical!
     port = int(os.environ.get('PORT', 8000))
+    debug_mode = os.environ.get('FLASK_ENV') != 'production'
     
-    print(f"\n🌐 Starting server...")
-    print(f"   Main page: http://localhost:{port}/")
+    print(f"\n🌐 Starting server on port {port}...")
     print(f"   Health check: http://localhost:{port}/health")
     print(f"   Test OpenAI: http://localhost:{port}/test-openai")
     
@@ -799,8 +797,14 @@ if __name__ == '__main__':
     
     print("="*60 + "\n")
     
-    app.run(
-        debug=debug_mode,
-        host='0.0.0.0',
-        port=port
-    )
+    # For Railway deployment - MUST use 0.0.0.0 and PORT env var
+    try:
+        app.run(
+            debug=debug_mode,
+            host='0.0.0.0',
+            port=port,
+            threaded=True
+        )
+    except Exception as e:
+        print(f"❌ Failed to start server: {e}")
+        exit(1)
