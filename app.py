@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
-import openai
+from openai import OpenAI
 import os
 import re
 import requests
@@ -44,12 +44,13 @@ CORS(app, origins=allowed_origins)
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
-# Initialize OpenAI client
+# Initialize OpenAI client - UPDATED VERSION
 if not app.config['OPENAI_API_KEY']:
     app.logger.error("❌ OPENAI_API_KEY not set! Please check your environment variables.")
     print("❌ CRITICAL: OpenAI API key is required!")
+    openai_client = None
 else:
-    openai.api_key = app.config['OPENAI_API_KEY']
+    openai_client = OpenAI(api_key=app.config['OPENAI_API_KEY'])
     app.logger.info("✅ OpenAI API key configured successfully")
 
 class SimpleChatSystem:
@@ -149,7 +150,7 @@ Never oversell - be helpful and genuine. If they're not ready, that's fine. Prov
     def generate_response(self, query: str, model: str = None) -> str:
         """Generate response using OpenAI with business automation knowledge"""
         try:
-            if not app.config['OPENAI_API_KEY']:
+            if not openai_client:
                 return "❌ OpenAI API key not configured. Please check your environment variables.\n\nWould you like a free consultation? Just share your email and we'll reach out!"
             
             model = model or app.config['OPENAI_MODEL']
@@ -171,7 +172,7 @@ PRICING: {'Discuss costs briefly if asked.' if pricing_requested else 'No pricin
 
 Always end with a simple consultation offer."""
             
-            response = openai.chat.completions.create(
+            response = openai_client.chat.completions.create(
                 model=model,
                 messages=[
                     {
@@ -190,14 +191,6 @@ Always end with a simple consultation offer."""
             
             return response.choices[0].message.content.strip()
             
-        except openai.RateLimitError:
-            app.logger.error("OpenAI rate limit exceeded")
-            return "I'm experiencing high demand right now. Please try again in a moment.\n\nWould you like a free consultation? Just share your email and we'll reach out!"
-        
-        except openai.AuthenticationError:
-            app.logger.error("OpenAI authentication failed")
-            return "There's an authentication issue with the AI service.\n\nWould you like a free consultation? Just share your email and we'll reach out!"
-        
         except Exception as e:
             app.logger.error(f"Error generating response: {e}")
             return "I'm having trouble right now, but I'd love to help! Our platform can automate your emails, reports, scheduling, and entire business workflows.\n\nWould you like a free consultation? Just share your email and we'll reach out!"
@@ -341,13 +334,13 @@ def health_check():
 def test_openai():
     """Test endpoint to verify OpenAI API"""
     try:
-        if not app.config['OPENAI_API_KEY']:
+        if not openai_client:
             return jsonify({
                 'openai_test': 'failed',
                 'error': 'API key not configured'
             }), 400
         
-        response = openai.chat.completions.create(
+        response = openai_client.chat.completions.create(
             model=app.config['OPENAI_MODEL'],
             messages=[{'role': 'user', 'content': 'Hello, respond with just "OK"'}],
             max_tokens=10,
