@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Optivus - More Information</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>">
+    <title>Optivus - Complete Business Automation</title>
     <style>
         * {
             margin: 0;
@@ -21,7 +20,7 @@
         }
 
         .container {
-            max-width: 800px;
+            max-width: 900px;
             margin: 0 auto;
             padding: 60px 20px;
         }
@@ -42,7 +41,7 @@
         }
 
         .header p {
-            font-size: 1.2rem;
+            font-size: 1.3rem;
             color: #a0a0a0;
             font-weight: 300;
         }
@@ -69,62 +68,149 @@
             line-height: 1.7;
         }
 
-        .section ul {
-            margin-left: 20px;
-            color: #c0c0c0;
+        .automation-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+            margin: 30px 0;
         }
 
-        .section li {
-            margin-bottom: 10px;
-            font-size: 1.1rem;
+        .automation-item {
+            background: rgba(255, 255, 255, 0.03);
+            padding: 25px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            transition: all 0.3s ease;
+        }
+
+        .automation-item:hover {
+            background: rgba(108, 99, 255, 0.1);
+            border-color: rgba(108, 99, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .automation-item h3 {
+            color: #6c63ff;
+            font-size: 1.2rem;
+            margin-bottom: 12px;
+            font-weight: 500;
+        }
+
+        .automation-item p {
+            font-size: 1rem;
+            color: #b0b0b0;
+            margin: 0;
+            line-height: 1.5;
+        }
+
+        .benefits-list {
+            list-style: none;
+            margin: 20px 0;
+        }
+
+        .benefits-list li {
+            background: rgba(16, 185, 129, 0.1);
+            margin: 10px 0;
+            padding: 15px 20px;
+            border-radius: 8px;
+            border-left: 3px solid #10b981;
+            font-size: 1.05rem;
+        }
+
+        .benefits-list li strong {
+            color: #10b981;
+        }
+
+        .industries-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .industry-tag {
+            background: linear-gradient(135deg, #6c63ff, #a855f7);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 25px;
+            text-align: center;
+            font-weight: 500;
+            font-size: 0.95rem;
         }
 
         .stats {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 25px;
             margin: 30px 0;
         }
 
         .stat {
             text-align: center;
-            padding: 20px;
+            padding: 25px;
             background: linear-gradient(135deg, #6c63ff, #a855f7);
-            border-radius: 10px;
+            border-radius: 15px;
         }
 
         .stat h3 {
-            font-size: 2rem;
+            font-size: 2.2rem;
             font-weight: 700;
-            margin-bottom: 5px;
+            margin-bottom: 8px;
             color: white;
         }
 
         .stat p {
-            font-size: 0.9rem;
+            font-size: 1rem;
             color: rgba(255, 255, 255, 0.9);
             margin: 0;
+            font-weight: 500;
+        }
+
+        .cta-section {
+            background: linear-gradient(135deg, #6c63ff, #a855f7);
+            padding: 40px;
+            border-radius: 15px;
+            text-align: center;
+            margin: 50px 0;
+        }
+
+        .cta-section h2 {
+            color: white;
+            margin-bottom: 15px;
+            font-size: 1.8rem;
+        }
+
+        .cta-section p {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 1.1rem;
+            margin-bottom: 0;
         }
 
         .back-button {
             display: inline-block;
             background: linear-gradient(135deg, #6c63ff, #a855f7);
             color: white;
-            padding: 12px 30px;
-            border-radius: 25px;
+            padding: 15px 35px;
+            border-radius: 30px;
             text-decoration: none;
             font-weight: 500;
             transition: all 0.3s ease;
             margin-top: 40px;
+            font-size: 1.1rem;
         }
 
         .back-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(108, 99, 255, 0.3);
+            transform: translateY(-3px);
+            box-shadow: 0 12px 25px rgba(108, 99, 255, 0.4);
         }
 
         .center {
             text-align: center;
+        }
+
+        .highlight {
+            color: #6c63ff;
+            font-weight: 600;
         }
 
         @media (max-width: 768px) {
@@ -144,8 +230,17 @@
                 font-size: 1.5rem;
             }
 
+            .automation-grid {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+
             .stats {
                 grid-template-columns: repeat(2, 1fr);
+            }
+
+            .industries-grid {
+                grid-template-columns: 1fr;
             }
         }
     </style>
@@ -154,62 +249,103 @@
     <div class="container">
         <div class="header">
             <h1>Optivus</h1>
-            <p>AI-Powered Business Intelligence</p>
+            <p>Small Business Helping Small Businesses Succeed</p>
         </div>
 
         <div class="section">
-            <h2>What We Do</h2>
-            <p>Optivus transforms businesses through AI automation. We don't just process documents—we create intelligent systems that handle your data, automate workflows, and optimize processes while you focus on growing your business.</p>
+            <h2>From One Small Business to Another</h2>
+            <p>We're a small business just like you. We understand the daily struggles—wearing multiple hats, handling everything manually, and feeling like there's never enough time. That's exactly why we built Optivus.</p>
+            <p>Instead of expensive enterprise solutions that cost thousands monthly, we created <span class="highlight">affordable automation</span> specifically designed for small businesses. Our AI handles the repetitive work so you can focus on what matters: growing your business and serving your customers.</p>
             
             <div class="stats">
                 <div class="stat">
-                    <h3>300-500%</h3>
-                    <p>ROI Increase</p>
+                    <h3>50+</h3>
+                    <p>Small Businesses Automated</p>
                 </div>
                 <div class="stat">
-                    <h3>80%</h3>
-                    <p>Time Savings</p>
+                    <h3>20-30hrs</h3>
+                    <p>Saved Per Week</p>
                 </div>
                 <div class="stat">
-                    <h3>24/7</h3>
-                    <p>Automated</p>
+                    <h3>$0</h3>
+                    <p>Setup Fees</p>
                 </div>
             </div>
         </div>
 
         <div class="section">
-            <h2>Our Services</h2>
-            <ul>
-                <li><strong>Document Intelligence:</strong> Extract and analyze data from any document type automatically</li>
-                <li><strong>Data Pipelines:</strong> Connect systems and automate data flows between platforms</li>
-                <li><strong>Process Automation:</strong> Eliminate repetitive tasks and optimize workflows</li>
-                <li><strong>Real-Time Analytics:</strong> Get instant insights with automated dashboards and reports</li>
-                <li><strong>Custom AI Solutions:</strong> Tailored AI models trained on your specific business needs</li>
+            <h2>Automation That Actually Makes Sense for Small Business</h2>
+            <div class="automation-grid">
+                <div class="automation-item">
+                    <h3>📧 Email Management</h3>
+                    <p>Stop drowning in emails. Our AI reads customer inquiries, extracts key info, and even drafts responses. Perfect for busy shop owners and service providers.</p>
+                </div>
+                <div class="automation-item">
+                    <h3>📊 Simple Reporting</h3>
+                    <p>Turn your messy spreadsheets into clear insights. Track sales, inventory, and customer patterns without spending hours on data entry.</p>
+                </div>
+                <div class="automation-item">
+                    <h3>📅 Appointment Scheduling</h3>
+                    <p>Let customers book appointments 24/7. Automatic confirmations, reminders, and follow-ups—even when you're focused on running your business.</p>
+                </div>
+                <div class="automation-item">
+                    <h3>⚙️ Daily Task Automation</h3>
+                    <p>Automate invoice generation, inventory alerts, customer follow-ups, and other time-consuming tasks that eat into your day.</p>
+                </div>
+                <div class="automation-item">
+                    <h3>🎧 After-Hours Support</h3>
+                    <p>Provide instant answers to common questions even when you're closed. Capture leads and schedule callbacks automatically.</p>
+                </div>
+                <div class="automation-item">
+                    <h3>🔗 Connect Your Tools</h3>
+                    <p>Link your POS, accounting software, and other tools so information flows automatically—no more double data entry.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Why Small Businesses Choose Us</h2>
+            <ul class="benefits-list">
+                <li><strong>We Get It:</strong> As fellow small business owners, we understand your challenges and budget constraints</li>
+                <li><strong>Start Small, Scale Up:</strong> Begin with one simple automation and add more as you grow</li>
+                <li><strong>Real ROI:</strong> Pay for itself in weeks, not years—see immediate time savings</li>
+                <li><strong>No Tech Headaches:</strong> We handle the setup and maintenance so you don't have to learn anything new</li>
+                <li><strong>Local Support:</strong> Talk to real people who understand small business, not corporate call centers</li>
+                <li><strong>Affordable Pricing:</strong> Monthly plans that make sense for small business budgets</li>
             </ul>
         </div>
 
         <div class="section">
-            <h2>Industries We Serve</h2>
-            <p>We work with businesses across all sectors including finance, healthcare, legal, manufacturing, real estate, and insurance. Our AI solutions adapt to your industry's specific requirements and compliance standards.</p>
+            <h2>Perfect for These Small Businesses</h2>
+            <div class="industries-grid">
+                <div class="industry-tag">Local Restaurants</div>
+                <div class="industry-tag">Hair & Beauty Salons</div>
+                <div class="industry-tag">Auto Repair Shops</div>
+                <div class="industry-tag">Real Estate Agents</div>
+                <div class="industry-tag">Local Retailers</div>
+                <div class="industry-tag">Service Contractors</div>
+                <div class="industry-tag">Medical Practices</div>
+                <div class="industry-tag">Fitness Studios</div>
+                <div class="industry-tag">Accounting Firms</div>
+                <div class="industry-tag">Cleaning Services</div>
+            </div>
         </div>
 
         <div class="section">
-            <h2>Why Choose Us</h2>
-            <ul>
-                <li><strong>Proven Results:</strong> Average 300-500% ROI within the first year</li>
-                <li><strong>Enterprise Security:</strong> Bank-level security with GDPR and HIPAA compliance</li>
-                <li><strong>Easy Integration:</strong> Works with your existing systems without disruption</li>
-                <li><strong>Expert Support:</strong> Dedicated team to ensure your success</li>
-            </ul>
+            <h2>Our Small Business Promise</h2>
+            <p>We know you're busy running your business and don't have time for complicated tech solutions. That's why we make automation simple and affordable.</p>
+            <p><span class="highlight">Free consultation:</span> We'll look at your daily tasks and show you exactly where automation can help—no sales pressure, just honest advice from one business owner to another.</p>
+            <p><span class="highlight">Quick setup:</span> Most automations are running within a week, and you'll see immediate results.</p>
+            <p><span class="highlight">Always there:</span> Need help? Call or text us directly. We answer because we know how important your business is to you.</p>
         </div>
 
-        <div class="section">
-            <h2>Get Started</h2>
-            <p>Ready to automate your business? We offer a free consultation to identify your highest-impact automation opportunities. Share your email in the chat and we'll reach out within 24 hours to schedule your assessment.</p>
+        <div class="cta-section">
+            <h2>Let's Chat About Your Business</h2>
+            <p>Schedule a 15-minute call with us. We'll look at what you're doing manually and show you how automation can give you your time back. No commitment, just helpful advice from fellow small business owners.</p>
         </div>
 
         <div class="center">
-            <a href="javascript:history.back()" class="back-button">← Back to Chat</a>
+            <a href="javascript:history.back()" class="back-button">← Get Your Free Consultation</a>
         </div>
     </div>
 </body>

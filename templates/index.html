@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Optivus - AI Business Intelligence</title>
-    <meta name="description" content="Experience the power of AI document intelligence. Ask questions about business documents and get instant, accurate answers.">
+    <title>Optivus - Complete Business Automation</title>
+    <meta name="description" content="Transform your business with comprehensive AI automation. Automate emails, reports, meetings, and entire workflows.">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>">
     
     <style>
@@ -22,6 +22,8 @@
             flex-direction: column;
             color: white;
             overflow-x: hidden;
+            margin: 0;
+            padding: 0;
         }
 
         .main-content {
@@ -30,20 +32,27 @@
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            padding: 40px 20px;
+            padding: 40px 20px 140px 20px;
             min-height: 100vh;
+            box-sizing: border-box;
         }
 
         .container {
             max-width: 900px;
             width: 100%;
             text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
         }
 
         .header {
             margin-bottom: 40px;
             opacity: 0;
             animation: fadeInUp 0.8s ease-out 0.2s forwards;
+            flex-shrink: 0;
         }
 
         .main-title {
@@ -102,16 +111,16 @@
         }
 
         .response-area {
-            min-height: 200px;
-            max-height: 400px;
+            max-height: 300px;
             display: flex;
             flex-direction: column;
-            margin-bottom: 60px;
-            padding: 40px 20px;
+            margin-bottom: 40px;
+            padding: 20px;
             opacity: 0;
             animation: fadeInUp 0.8s ease-out 0.4s forwards;
             overflow-y: auto;
             overflow-x: hidden;
+            min-height: 150px;
         }
 
         .placeholder-text {
@@ -153,8 +162,60 @@
         }
 
         .input-section {
+            width: 100%;
+            max-width: 900px;
+            padding: 0 20px;
             opacity: 0;
             animation: fadeInUp 0.8s ease-out 0.6s forwards;
+            margin: 0 auto;
+            box-sizing: border-box;
+        }
+
+        /* Prompt Suggestions */
+        .prompt-suggestions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            justify-content: center;
+            margin-bottom: 25px;
+            width: 100%;
+            margin-left: auto;
+            margin-right: auto;
+            opacity: 1;
+            transform: translateY(0);
+            transition: all 0.4s ease;
+        }
+
+        .prompt-suggestions.hidden {
+            opacity: 0;
+            transform: translateY(-20px);
+            pointer-events: none;
+        }
+
+        .prompt-chip {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: #e2e8f0;
+            padding: 12px 20px;
+            border-radius: 25px;
+            font-size: 0.95rem;
+            font-weight: 300;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            user-select: none;
+            white-space: nowrap;
+        }
+
+        .prompt-chip:hover {
+            background: rgba(79, 143, 240, 0.15);
+            border-color: rgba(79, 143, 240, 0.3);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(79, 143, 240, 0.15);
+        }
+
+        .prompt-chip:active {
+            transform: translateY(0);
         }
 
         .input-container {
@@ -163,6 +224,7 @@
             margin: 0 auto;
             display: flex;
             align-items: center;
+            width: 100%;
         }
 
         .chat-input {
@@ -222,7 +284,7 @@
         }
 
         .features {
-            margin-top: 60px;
+            margin-top: 40px;
             display: flex;
             justify-content: center;
             gap: 40px;
@@ -253,6 +315,7 @@
             background: rgba(10, 15, 28, 0.95);
             backdrop-filter: blur(20px);
             z-index: 100;
+            height: 60px;
         }
 
         .footer-link {
@@ -309,7 +372,11 @@
         /* Mobile Responsive */
         @media (max-width: 768px) {
             .main-content {
-                padding: 30px 15px;
+                padding: 30px 15px 80px 15px;
+            }
+
+            .input-section {
+                padding: 0 15px;
             }
 
             .main-title {
@@ -328,13 +395,11 @@
             .response-area {
                 padding: 15px;
                 margin-bottom: 30px;
-                height: calc(100vh - 400px);
-                min-height: 300px;
             }
             
             .features {
                 gap: 25px;
-                margin-top: 40px;
+                margin-top: 20px;
             }
             
             .feature {
@@ -351,9 +416,27 @@
                 height: 40px;
                 font-size: 1.1rem;
             }
+
+            .prompt-suggestions {
+                gap: 8px;
+                margin-bottom: 20px;
+            }
+
+            .prompt-chip {
+                font-size: 0.85rem;
+                padding: 10px 16px;
+            }
         }
 
         @media (max-width: 480px) {
+            .main-content {
+                padding: 20px 10px 80px 10px;
+            }
+
+            .input-section {
+                padding: 0 10px;
+            }
+
             .main-title {
                 font-size: 2rem;
             }
@@ -367,13 +450,23 @@
             }
 
             .input-container {
-                max-width: 95%;
+                max-width: 100%;
             }
 
             .features {
                 gap: 20px;
                 flex-direction: column;
                 align-items: center;
+                margin-top: 20px;
+            }
+
+            .prompt-suggestions {
+                max-width: 100%;
+            }
+
+            .prompt-chip {
+                font-size: 0.8rem;
+                padding: 8px 14px;
             }
         }
 
@@ -414,6 +507,16 @@
             </div>
 
             <div class="input-section">
+                <!-- Prompt Suggestions -->
+                <div class="prompt-suggestions" id="promptSuggestions">
+                    <div class="prompt-chip" data-prompt="How can you automate my email management?">📧 Email Automation</div>
+                    <div class="prompt-chip" data-prompt="Can you analyze my business reports automatically?">📊 Report Analysis</div>
+                    <div class="prompt-chip" data-prompt="How can AI schedule meetings and manage my calendar?">📅 Calendar Automation</div>
+                    <div class="prompt-chip" data-prompt="What business processes can you automate for me?">⚙️ Workflow Automation</div>
+                    <div class="prompt-chip" data-prompt="How do I get started with business automation?">🚀 Get Started</div>
+                    <div class="prompt-chip" data-prompt="I want to schedule a consultation">💬 Book Consultation</div>
+                </div>
+
                 <div class="input-container">
                     <input 
                         type="text" 
@@ -448,11 +551,54 @@
         const placeholderText = document.getElementById('placeholderText');
         const typingIndicator = document.getElementById('typingIndicator');
         const errorMessage = document.getElementById('errorMessage');
+        const promptSuggestions = document.getElementById('promptSuggestions');
+        const promptChips = document.querySelectorAll('.prompt-chip');
 
         let isLoading = false;
         let conversationStarted = false;
-        let awaitingSchedulingDecision = false;
-        let awaitingEmailAndTime = false;
+
+        // Handle prompt chip clicks
+        promptChips.forEach(chip => {
+            chip.addEventListener('click', () => {
+                const prompt = chip.getAttribute('data-prompt');
+                chatInput.value = prompt;
+                hidePromptSuggestions();
+                sendMessage();
+            });
+        });
+
+        // Hide prompt suggestions when user starts typing
+        chatInput.addEventListener('input', () => {
+            if (chatInput.value.trim().length > 0 && !conversationStarted) {
+                hidePromptSuggestions();
+            } else if (chatInput.value.trim().length === 0 && !conversationStarted) {
+                showPromptSuggestions();
+            }
+        });
+
+        // Hide suggestions when input is focused and has content
+        chatInput.addEventListener('focus', () => {
+            if (chatInput.value.trim().length > 0 && !conversationStarted) {
+                hidePromptSuggestions();
+            }
+        });
+
+        // Show suggestions when input is empty and not in conversation
+        chatInput.addEventListener('blur', () => {
+            setTimeout(() => {
+                if (chatInput.value.trim().length === 0 && !conversationStarted) {
+                    showPromptSuggestions();
+                }
+            }, 100);
+        });
+
+        function showPromptSuggestions() {
+            promptSuggestions.classList.remove('hidden');
+        }
+
+        function hidePromptSuggestions() {
+            promptSuggestions.classList.add('hidden');
+        }
 
         function showError(message) {
             errorMessage.textContent = message;
@@ -474,30 +620,12 @@
             typingIndicator.style.display = 'none';
         }
 
-        function parseEmailAndTime(message) {
-            const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/;
-            const emailMatch = message.match(emailRegex);
-            
-            if (emailMatch) {
-                const email = emailMatch[1];
-                const timeText = message.replace(email, '').trim();
-                return {
-                    email: email,
-                    time: timeText || null
-                };
-            }
-            return null;
-        }
-
         function addUserMessage(message) {
-            console.log('Adding user message:', message);
-            console.log('Conversation started:', conversationStarted);
-            
             if (!conversationStarted) {
                 placeholderText.style.display = 'none';
                 chatHistory.style.display = 'block';
                 conversationStarted = true;
-                console.log('Started conversation, hiding placeholder');
+                hidePromptSuggestions();
             }
 
             const messageDiv = document.createElement('div');
@@ -505,13 +633,9 @@
             messageDiv.textContent = message;
             chatHistory.appendChild(messageDiv);
             chatHistory.scrollTop = chatHistory.scrollHeight;
-            console.log('User message added to DOM');
         }
 
         function addAIMessage(message, isSuccess = false) {
-            console.log('Adding AI message:', message.substring(0, 50) + '...');
-            console.log('Is success message:', isSuccess);
-            
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ai-message ${isSuccess ? 'success-message' : ''}`;
             
@@ -530,7 +654,6 @@
                 }
             }
             type();
-            console.log('AI message added to DOM');
         }
 
         function setLoadingState(loading) {
@@ -551,7 +674,7 @@
 
             hideError();
             
-            // Add user message to chat FIRST
+            // Add user message to chat
             addUserMessage(message);
             
             // Clear input and set loading
@@ -567,9 +690,7 @@
                     },
                     body: JSON.stringify({
                         message: message,
-                        model: 'llama3.2',
-                        awaiting_scheduling_decision: awaitingSchedulingDecision,
-                        awaiting_email_and_time: awaitingEmailAndTime
+                        model: 'gpt-3.5-turbo'  // FIXED: Use OpenAI model instead of llama3.2
                     })
                 });
 
@@ -583,33 +704,8 @@
                 setLoadingState(false);
                 
                 if (data.response) {
-                    const askForScheduling = data.ask_for_scheduling === true;
-                    const askForEmailAndTime = data.ask_for_email_and_time === true;
-                    const appointmentConfirmed = data.appointment_confirmed === true;
-                    const appointmentBusy = data.appointment_busy === true;
-                    
-                    addAIMessage(data.response, appointmentConfirmed);
-                    
-                    // Update conversation state
-                    if (askForScheduling) {
-                        awaitingSchedulingDecision = true;
-                        awaitingEmailAndTime = false;
-                        setTimeout(() => {
-                            chatInput.placeholder = "Type 'yes' to schedule a consultation...";
-                        }, 2000);
-                    } else if (askForEmailAndTime) {
-                        awaitingSchedulingDecision = false;
-                        awaitingEmailAndTime = true;
-                        setTimeout(() => {
-                            chatInput.placeholder = "Enter your email and preferred time (e.g., 'john@email.com tomorrow at 2pm')";
-                        }, 2000);
-                    } else if (appointmentConfirmed || appointmentBusy) {
-                        awaitingSchedulingDecision = false;
-                        awaitingEmailAndTime = false;
-                        setTimeout(() => {
-                            chatInput.placeholder = "Feel free to ask another question...";
-                        }, 2000);
-                    }
+                    const isEmailCaptured = data.email_captured === true;
+                    addAIMessage(data.response, isEmailCaptured);
                 } else {
                     addAIMessage('Sorry, I couldn\'t process your request.');
                 }
