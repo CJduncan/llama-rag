@@ -44,14 +44,23 @@ CORS(app, origins=allowed_origins)
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
-# Initialize OpenAI client - UPDATED VERSION
-if not app.config['OPENAI_API_KEY']:
-    app.logger.error("❌ OPENAI_API_KEY not set! Please check your environment variables.")
-    print("❌ CRITICAL: OpenAI API key is required!")
-    openai_client = None
-else:
-    openai_client = OpenAI(api_key=app.config['OPENAI_API_KEY'])
-    app.logger.info("✅ OpenAI API key configured successfully")
+# Global OpenAI client variable
+openai_client = None
+
+def initialize_openai():
+    """Initialize OpenAI client safely"""
+    global openai_client
+    try:
+        if app.config['OPENAI_API_KEY']:
+            openai_client = OpenAI(api_key=app.config['OPENAI_API_KEY'])
+            app.logger.info("✅ OpenAI API key configured successfully")
+            return True
+        else:
+            app.logger.error("❌ OPENAI_API_KEY not set!")
+            return False
+    except Exception as e:
+        app.logger.error(f"❌ Failed to initialize OpenAI: {e}")
+        return False
 
 class SimpleChatSystem:
     """Simplified chat system without document storage"""
@@ -150,8 +159,10 @@ Never oversell - be helpful and genuine. If they're not ready, that's fine. Prov
     def generate_response(self, query: str, model: str = None) -> str:
         """Generate response using OpenAI with business automation knowledge"""
         try:
+            # Initialize OpenAI if not already done
             if not openai_client:
-                return "❌ OpenAI API key not configured. Please check your environment variables.\n\nWould you like a free consultation? Just share your email and we'll reach out!"
+                if not initialize_openai():
+                    return "❌ OpenAI service not available. Please try again later.\n\nWould you like a free consultation? Just share your email and we'll reach out!"
             
             model = model or app.config['OPENAI_MODEL']
             
@@ -334,11 +345,13 @@ def health_check():
 def test_openai():
     """Test endpoint to verify OpenAI API"""
     try:
+        # Initialize OpenAI if not already done
         if not openai_client:
-            return jsonify({
-                'openai_test': 'failed',
-                'error': 'API key not configured'
-            }), 400
+            if not initialize_openai():
+                return jsonify({
+                    'openai_test': 'failed',
+                    'error': 'API key not configured or initialization failed'
+                }), 400
         
         response = openai_client.chat.completions.create(
             model=app.config['OPENAI_MODEL'],
