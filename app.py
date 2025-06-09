@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, session
 from flask_cors import CORS
 import openai
 import os
@@ -7,6 +7,7 @@ import requests
 from datetime import datetime
 import secrets
 import logging
+from collections import defaultdict
 
 # Load environment variables from .env file
 try:
@@ -39,7 +40,7 @@ app.config.update(
 
 # Configure CORS for production
 allowed_origins = os.environ.get('CORS_ORIGINS', '*').split(',')
-CORS(app, origins=allowed_origins)
+CORS(app, origins=allowed_origins, supports_credentials=True)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -51,89 +52,31 @@ if app.config['OPENAI_API_KEY']:
 else:
     app.logger.error("❌ OPENAI_API_KEY not set!")
 
+# In-memory conversation storage (use Redis in production)
+conversations = defaultdict(list)
+
 class SimpleChatSystem:
-    """Simplified chat system without document storage"""
+    """Simplified chat system with conversation history"""
     
     def __init__(self):
         # Business automation knowledge base
         self.business_automation_context = """
         OPTIVUS BUSINESS AUTOMATION PLATFORM
-        Key messaging:
-- We are a SMALL BUSINESS helping other SMALL BUSINESSES succeed
-- We understand the daily struggles of small business owners: wearing multiple hats, manual processes, never enough time
-- Our automation is AFFORDABLE and designed specifically for small businesses (not enterprise)
-- We focus on practical, immediate time-saving solutions
-
-Common small business automation opportunities:
-1. Email management (customer inquiries, follow-ups)
-2. Appointment scheduling and reminders  
-3. Invoice generation and tracking
-4. Inventory alerts and management
-5. Customer follow-up sequences
-6. Lead capture and qualification
-7. Social media posting and responses
-8. Report generation from sales data
-9. After-hours customer support
-10. Integration between POS, accounting, and other tools
-
-Perfect for: Local restaurants, salons, auto shops, real estate agents, retailers, contractors, medical practices, fitness studios, accounting firms, cleaning services.
-
-Tone: Friendly, understanding, fellow small business owner. Use "we understand" and "as fellow business owners" language. Focus on ROI, time savings, and simplicity.
-
-When they show interest or ask about getting started, guide them toward scheduling a free 15-minute consultation to discuss their specific business needs.
-
-Never oversell - be helpful and genuine. If they're not ready, that's fine. Provide value regardless.
-
-        WHAT WE DO:
-        Optivus provides comprehensive AI-powered business automation solutions that transform how companies operate. We automate entire business workflows and processes.
-
-        CORE AUTOMATION CAPABILITIES:
-
-        1. EMAIL AUTOMATION & MANAGEMENT
-        - Read and analyze incoming emails automatically
-        - Generate and send personalized email responses
-        - Route emails to appropriate departments/people
-        - Extract action items and deadlines from email conversations
-        - Automatically follow up on pending communications
-
-        2. WORKFLOW AUTOMATION
-        - Connect different business systems and tools
-        - Automate repetitive tasks and processes
-        - Create intelligent decision trees for complex workflows
-        - Handle approvals, notifications, and escalations
-        - Streamline operations from lead to customer success
-
-        3. CUSTOMER SERVICE AUTOMATION
-        - Provide 24/7 intelligent customer support
-        - Analyze customer inquiries and route appropriately
-        - Generate personalized responses based on customer history
-        - Escalate complex issues to human agents when needed
-        - Track and resolve customer issues automatically
-
-        4. SCHEDULING & CALENDAR AUTOMATION
-        - Schedule meetings based on availability and preferences
-        - Send meeting invitations and reminders automatically
-        - Follow up on meeting commitments and deadlines
-        - Coordinate complex multi-stakeholder scheduling
-
-        5. DATA INTEGRATION & SYNC
-        - Connect CRMs, ERPs, and other business systems
-        - Synchronize data across multiple platforms
-        - Maintain data consistency and accuracy
-        - Create unified views of business information
-        - Automate data entry and updates
-
-        BUSINESS BENEFITS:
-        - Reduce manual work by 70-90%
-        - Eliminate human errors in repetitive tasks
-        - Operate 24/7 without breaks or holidays
-        - Scale operations without hiring more staff
-        - Free up employees for strategic, creative work
-        - Improve customer response times dramatically
-        - Ensure consistent quality and compliance
-
-        GETTING STARTED:
-        We offer free consultation sessions to identify automation opportunities specific to your business.
+        
+        We are a SMALL BUSINESS helping other SMALL BUSINESSES succeed through affordable automation.
+        
+        WHAT WE DO: Automate emails, reports, scheduling, workflows, and business processes for small businesses.
+        
+        CORE SERVICES:
+        1. Email automation & management
+        2. Workflow automation  
+        3. Customer service automation
+        4. Scheduling & calendar automation
+        5. Data integration & sync
+        
+        BENEFITS: Reduce manual work by 70-90%, eliminate errors, operate 24/7, scale without hiring.
+        
+        PERFECT FOR: Restaurants, salons, auto shops, real estate agents, retailers, contractors, medical practices, fitness studios.
         """
     
     def check_pricing_request(self, query: str) -> bool:
@@ -145,57 +88,109 @@ Never oversell - be helpful and genuine. If they're not ready, that's fine. Prov
         ]
         return any(keyword in query.lower() for keyword in pricing_keywords)
     
-    def generate_response(self, query: str, model: str = None) -> str:
-        """Generate response using OpenAI with business automation knowledge"""
+    def should_ask_for_email(self, query: str, conversation_history: list) -> bool:
+        """Determine if we should ask for email based on conversation"""
+        # Keywords that indicate interest
+        interest_keywords = [
+            'interested', 'how do i start', 'get started', 'sign up', 'learn more',
+            'tell me more', 'sounds good', 'want to try', 'need help', 'can you help',
+            'pricing', 'cost', 'consultation', 'schedule', 'meeting', 'call'
+        ]
+        
+        # Check if user seems interested
+        user_interested = any(keyword in query.lower() for keyword in interest_keywords)
+        
+        # Check if we haven't asked for email recently (last 3 messages)
+        recent_messages = conversation_history[-6:] if len(conversation_history) >= 6 else conversation_history
+        asked_for_email_recently = any('email' in msg.get('content', '').lower() and msg.get('role') == 'assistant' 
+                                     for msg in recent_messages)
+        
+        # Ask for email if user shows interest and we haven't asked recently
+        return user_interested and not asked_for_email_recently
+    
+    def generate_response(self, query: str, session_id: str, model: str = None) -> str:
+        """Generate response using OpenAI with conversation history"""
         try:
             if not app.config['OPENAI_API_KEY']:
                 return "❌ OpenAI service not available. Please try again later.\n\nWould you like a free consultation? Just share your email and we'll reach out!"
             
             model = model or app.config['OPENAI_MODEL']
             
+            # Get conversation history
+            conversation_history = conversations[session_id]
+            
             # Check if pricing is requested
             pricing_requested = self.check_pricing_request(query)
             
-            system_prompt = f"""You are an AI assistant for Optivus, a business automation platform. Give SHORT, helpful answers (2-3 sentences max).
+            # Check if we should ask for email
+            ask_for_email = self.should_ask_for_email(query, conversation_history)
+            
+            system_prompt = f"""You are an AI assistant for Optivus, a business automation platform for small businesses.
 
-WHAT WE DO: Automate emails, reports, scheduling, workflows, and business processes for small businesses.
+PERSONALITY: Friendly, helpful, understanding fellow small business owner.
+
+WHAT WE DO: Automate emails, reports, scheduling, workflows, and business processes for small businesses like restaurants, salons, contractors, etc.
 
 RESPONSE STYLE:
-- Brief and conversational
-- Specific examples when helpful
-- Not salesy or over-enthusiastic
-- Natural and friendly tone
+- Keep responses SHORT (2-3 sentences max)
+- Be conversational and natural
+- Show you understand small business struggles
+- Give specific examples when helpful
+- Don't be overly salesy
 
-PRICING: {'Discuss costs briefly if asked.' if pricing_requested else 'No pricing unless specifically asked.'}
+PRICING: {'Mention that we offer affordable automation solutions designed for small business budgets if asked.' if pricing_requested else 'No pricing unless specifically asked.'}
 
-Always end with a simple consultation offer."""
+EMAIL CAPTURE: {'Ask for their email to schedule a free consultation after your response.' if ask_for_email else 'Only ask for email if they show clear interest in getting started.'}
+
+Remember previous conversation context and build on it naturally."""
             
-            # Use legacy OpenAI API call
+            # Build messages with conversation history
+            messages = [{'role': 'system', 'content': system_prompt}]
+            
+            # Add conversation history (last 10 messages to keep context reasonable)
+            recent_history = conversation_history[-10:] if len(conversation_history) > 10 else conversation_history
+            messages.extend(recent_history)
+            
+            # Add current user message
+            messages.append({'role': 'user', 'content': query})
+            
+            # Call OpenAI
             response = openai.ChatCompletion.create(
                 model=model,
-                messages=[
-                    {
-                        'role': 'system',
-                        'content': system_prompt
-                    },
-                    {
-                        'role': 'user',
-                        'content': f"Business automation context: {self.business_automation_context}\n\nUser question: {query}"
-                    }
-                ],
-                max_tokens=120,
+                messages=messages,
+                max_tokens=150,
                 temperature=0.7,
                 timeout=30
             )
             
-            return response.choices[0].message.content.strip()
+            assistant_response = response.choices[0].message.content.strip()
+            
+            # Add email ask if needed and not already included
+            if ask_for_email and 'email' not in assistant_response.lower():
+                assistant_response += "\n\nWould you like to schedule a free 15-minute consultation? Just share your email and I'll have someone reach out to discuss your specific automation needs!"
+            
+            # Store conversation history
+            conversations[session_id].append({'role': 'user', 'content': query})
+            conversations[session_id].append({'role': 'assistant', 'content': assistant_response})
+            
+            # Keep conversation history manageable (last 20 messages)
+            if len(conversations[session_id]) > 20:
+                conversations[session_id] = conversations[session_id][-20:]
+            
+            return assistant_response
             
         except Exception as e:
             app.logger.error(f"Error generating response: {e}")
-            return "I'm having trouble right now, but I'd love to help! Our platform can automate your emails, reports, scheduling, and entire business workflows.\n\nWould you like a free consultation? Just share your email and we'll reach out!"
+            return "I'm having trouble right now, but I'd love to help! Our platform automates emails, reports, scheduling, and workflows for small businesses.\n\nWould you like a free consultation? Just share your email and we'll reach out!"
 
 # Initialize chat system
 chat_system = SimpleChatSystem()
+
+def get_session_id():
+    """Get or create session ID"""
+    if 'session_id' not in session:
+        session['session_id'] = secrets.token_hex(16)
+    return session['session_id']
 
 def is_valid_email(email):
     """Validate email format"""
@@ -212,7 +207,7 @@ def extract_email_from_message(message):
             return match
     return None
 
-def send_to_n8n(email, context=""):
+def send_to_n8n(email, context="", session_id=""):
     """Send email to n8n webhook"""
     try:
         webhook_url = app.config.get('N8N_WEBHOOK_URL')
@@ -228,6 +223,7 @@ def send_to_n8n(email, context=""):
             'timestamp': datetime.now().isoformat(),
             'source': 'ai-chat',
             'context': context,
+            'session_id': session_id,
             'ip': request.remote_addr,
             'user_agent': request.headers.get('User-Agent', ''),
             'message': 'New consultation request from AI chat'
@@ -271,36 +267,43 @@ def chat():
         if not query:
             return jsonify({'error': 'No message provided'}), 400
         
-        app.logger.info(f"Received message: '{query}'")
+        # Get session ID for conversation tracking
+        session_id = get_session_id()
+        
+        app.logger.info(f"Received message: '{query}' (Session: {session_id})")
         
         # Check if the message contains an email
         extracted_email = extract_email_from_message(query)
         
         if extracted_email:
             # Send email to n8n
-            success = send_to_n8n(extracted_email, "Consultation request from AI chat")
+            success = send_to_n8n(extracted_email, "Consultation request from AI chat", session_id)
+            
+            # Store the email capture in conversation history
+            conversations[session_id].append({'role': 'user', 'content': query})
             
             if success:
-                response_text = "Thank you! We've received your email and will be in touch within 24 hours to schedule your free consultation. We're excited to discuss how business automation can transform your operations!"
+                response_text = "Perfect! Thank you for sharing your email. We'll be in touch within 24 hours to schedule your free consultation. I'm excited for you to see how business automation can transform your operations and save you hours every week!"
             else:
-                response_text = "Thank you for your interest! There was a technical issue capturing your email, but you can reach us directly for a consultation."
+                response_text = "Thank you for your email! There was a technical issue on our end, but don't worry - you can also reach us directly at our website. We'd love to discuss how automation can help your business!"
+            
+            # Store response in conversation history
+            conversations[session_id].append({'role': 'assistant', 'content': response_text})
             
             return jsonify({
                 'response': response_text,
                 'sources': 0,
-                'email_captured': success
+                'email_captured': success,
+                'session_id': session_id
             })
         
-        # Generate response
-        response = chat_system.generate_response(query, model)
-        
-        # Add consultation offer to every response
-        if "consultation" not in response.lower():
-            response += "\n\nWould you like a free consultation? Just share your email and we'll reach out!"
+        # Generate response with conversation history
+        response = chat_system.generate_response(query, session_id, model)
         
         return jsonify({
             'response': response,
-            'sources': 0
+            'sources': 0,
+            'session_id': session_id
         })
             
     except Exception as e:
@@ -319,6 +322,7 @@ def health_check():
             'webhook_configured': bool(webhook_url),
             'openai_configured': openai_configured,
             'openai_model': app.config.get('OPENAI_MODEL'),
+            'active_conversations': len(conversations),
             'timestamp': datetime.now().isoformat(),
             'environment': os.environ.get('FLASK_ENV', 'development')
         })
@@ -372,7 +376,7 @@ def internal_error(error):
 if __name__ == '__main__':
     # Print startup banner
     print("\n" + "="*60)
-    print("🚀 OPTIVUS AI CHAT SERVER (Legacy OpenAI)")
+    print("🚀 OPTIVUS AI CHAT SERVER (With History & Email)")
     print("="*60)
     
     # Validate critical environment variables
